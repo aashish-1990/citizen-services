@@ -112,10 +112,11 @@ if not st.session_state.is_admin:
 
     elif st.session_state.step == 1.2:  # After Pay Ticket
         email = st.text_input("📧 Where should we send the ticket confirmation?")
-        if email:
+        if email and "@" in email and "." in email:
             st.session_state.email = email
-            st.success(f"Ticket payment successful! Confirmation sent to {email}.")
-            st.session_state.step = 2
+            if st.button("Confirm Payment"):
+                st.success(f"Ticket payment successful! Confirmation sent to {email}.")
+                st.session_state.step = 2
 
     elif st.session_state.step == 1.3:  # After Permit Submission
         email = st.text_input("📧 Enter your email for confirmation:")
