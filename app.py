@@ -1,6 +1,12 @@
-# Enhanced Streamlit UI for LIA – Gov2Biz-style Multi-Service Chatbot with Avatars, Help, Voice Input, and TTS
+# Enhanced Streamlit UI for LIA – Gov2Biz-style Multi-Service Chatbot with Avatars, Help, Real-Time Voice Input (WebRTC), and TTS
 import streamlit as st
 import streamlit.components.v1 as components
+from streamlit_webrtc import webrtc_streamer, WebRtcMode, ClientSettings
+import av
+import numpy as np
+import queue
+import threading
+import whisper
 
 st.set_page_config(page_title="LIA – City Assistant", layout="centered")
 st.image("https://cdn-icons-png.flaticon.com/512/4712/4712107.png", width=80)
@@ -11,7 +17,6 @@ if "step" not in st.session_state:
 if "intent" not in st.session_state:
     st.session_state.intent = None
 
-# TTS welcome voice (female)
 st.markdown("""
 <audio autoplay>
   <source src="https://github.com/audiojs/audiojs/raw/master/audio/hello-welcome-kermit.mp3" type="audio/mpeg">
@@ -19,16 +24,20 @@ st.markdown("""
 </audio>
 """, unsafe_allow_html=True)
 
-# Custom welcome voice text using JS TTS
 components.html("""
 <script>
 window.onload = function() {
   const msg = new SpeechSynthesisUtterance("Hi there! I'm LIA, your assistant from the City of Kermit. How can I help you today?");
-  msg.voice = speechSynthesis.getVoices().find(voice => voice.name.includes('Google') && voice.name.includes('Female')) || speechSynthesis.getVoices()[0];
-  msg.lang = 'en-US';
-  msg.pitch = 1.2;
-  msg.rate = 1;
-  speechSynthesis.speak(msg);
+  const voices = window.speechSynthesis.getVoices();
+  if (!voices.length) {
+    setTimeout(() => speechSynthesis.speak(msg), 500);
+  } else {
+    msg.voice = voices.find(v => v.name.includes('Female')) || voices[0];
+    msg.lang = 'en-US';
+    msg.pitch = 1.2;
+    msg.rate = 1;
+    speechSynthesis.speak(msg);
+  }
 };
 </script>
 """, height=0)
@@ -43,31 +52,61 @@ st.markdown("""<style>
 }
 </style>""", unsafe_allow_html=True)
 
-# Voice recorder script
-st.markdown("""
-<script>
-  let recognition;
-  function startListening() {
-    if (!('webkitSpeechRecognition' in window)) {
-      alert("Your browser doesn't support voice recognition. Try using Chrome.");
-      return;
-    }
-    recognition = new webkitSpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.lang = "en-US";
-    recognition.start();
-    recognition.onresult = function(event) {
-      const transcript = event.results[0][0].transcript;
-      document.getElementById("voice_result").value = transcript;
-      document.getElementById("submit_voice").click();
-    };
-  }
-</script>
-<button onclick="startListening()">🎤 Speak to LIA</button>
-<br><input type="text" id="voice_result" style="display:none"/>
-<button id="submit_voice" style="display:none" onclick="document.forms[0].submit();">Submit</button>
-""", unsafe_allow_html=True)
+# Whisper transcription handler
+result_queue = queue.Queue()
+model = whisper.load_model("base")
+
+class AudioProcessor:
+    def __init__(self):
+        self.buffer = queue.Queue()
+
+    def recv(self, frame):
+        audio = frame.to_ndarray()
+        audio = audio.mean(axis=1).astype(np.int16)  # Mono
+        self.buffer.put(audio)
+        return av.AudioFrame.from_ndarray(audio, layout="mono")
+
+    def transcribe_background(self):
+        while True:
+            audio_chunk = []
+            while not self.buffer.empty():
+                audio_chunk.extend(self.buffer.get())
+            if audio_chunk:
+                try:
+                    audio_np = np.array(audio_chunk, dtype=np.float32) / 32768.0
+                    result = model.transcribe(audio_np, language='en')
+                    result_queue.put(result['text'])
+                except Exception as e:
+                    result_queue.put(f"[ERROR] {e}")
+            else:
+                result_queue.put("")
+
+ap = AudioProcessor()
+th = threading.Thread(target=ap.transcribe_background, daemon=True)
+th.start()
+
+st.markdown("### 🎤 Speak to LIA")
+webrtc_streamer(key="mic", mode=WebRtcMode.SENDONLY, client_settings=ClientSettings(media_stream_constraints={"audio": True, "video": False}), audio_processor_factory=lambda: ap)
+
+if not result_queue.empty():
+    transcript = result_queue.get()
+    if transcript:
+        st.success(f"You said: {transcript}")
+        if "bill" in transcript.lower():
+            st.session_state.intent = "Pay a utility bill"
+            st.session_state.step = 1
+        elif "ticket" in transcript.lower():
+            st.session_state.intent = "Pay a ticket"
+            st.session_state.step = 1
+        elif "permit" in transcript.lower():
+            st.session_state.intent = "Apply for a permit"
+            st.session_state.step = 1
+        elif "report" in transcript.lower() or "issue" in transcript.lower():
+            st.session_state.intent = "Report a city issue"
+            st.session_state.step = 1
+        else:
+            st.session_state.intent = "Something else"
+            st.session_state.step = 1
 
 # Step 0: Friendly multi-intent welcome message
 if st.session_state.step == 0:
