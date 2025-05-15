@@ -1,62 +1,85 @@
-# Streamlit front-end for GovCraft Citizen Chat Agent
+# Enhanced Streamlit UI for LIA – Gov2Biz-style Multi-Service Chatbot
 import streamlit as st
 
-st.set_page_config(page_title="City of Kermit – Pay Utility Bill", layout="centered")
-st.title("💬 Pay Your City Bill")
+st.set_page_config(page_title="LIA – City Assistant", layout="centered")
+st.title("🤖 Meet LIA – Your City of Kermit Assistant")
 
-# Session state to track conversation if needed
 if "step" not in st.session_state:
     st.session_state.step = 0
+if "intent" not in st.session_state:
+    st.session_state.intent = None
 
-if "address" not in st.session_state:
-    st.session_state.address = ""
-
-if "bill_found" not in st.session_state:
-    st.session_state.bill_found = False
-
-if "email" not in st.session_state:
-    st.session_state.email = ""
-
-# Step 0: Greet and ask address
+# Step 0: Friendly multi-intent welcome message
 if st.session_state.step == 0:
-    st.write("👋 Hello! I can help you pay your utility bill. Please enter your **street address**.")
-    address_input = st.text_input("Your Address", placeholder="e.g., 123 South Olive Street")
-    if st.button("Search My Bills") and address_input:
-        st.session_state.address = address_input
-        if "olive" in address_input.lower():
-            st.session_state.bill_found = True
+    st.markdown("""
+    👋 Hello there! I'm **LIA**, your friendly assistant from the City of Kermit.
+    
+    I can help you with:
+    
+    1️⃣ Pay a utility bill  
+    2️⃣ Pay a traffic or parking ticket  
+    3️⃣ Apply for a permit (like garage sale or construction)  
+    4️⃣ Report an issue (e.g., pothole, light outage)  
+    5️⃣ Something else
+    """)
+
+    st.session_state.intent = st.radio("What would you like help with?", [
+        "Pay a utility bill",
+        "Pay a ticket",
+        "Apply for a permit",
+        "Report a city issue",
+        "Something else"
+    ])
+
+    if st.button("Continue"):
         st.session_state.step = 1
 
-# Step 1: Show bill info
+# Step 1: Route by Intent
 if st.session_state.step == 1:
-    if st.session_state.bill_found:
-        st.success("✅ We found an unpaid bill at this address!")
+    intent = st.session_state.intent
+
+    if intent == "Pay a utility bill":
         st.markdown("""
-        **Bill Details**
-        - 💧 Service: Water
-        - 💵 Amount: $105.75
-        - 📅 Due: May 31, 2025
+        💧 Great! Let's look up your bill.
+        Could you please enter the address where you receive the service?
         """)
-        if st.button("Yes, I want to pay"):
-            st.session_state.step = 2
-    else:
-        st.warning("❌ Sorry, we couldn’t find any unpaid bills at that address.")
-        if st.button("Try Another Address"):
-            st.session_state.step = 0
+        address_input = st.text_input("Service Address", placeholder="e.g., 123 South Olive Street")
+        if st.button("Find My Bill") and address_input:
+            if "olive" in address_input.lower():
+                st.success("✅ Found one unpaid Water bill for $105.75 due May 31.")
+                st.markdown("[💳 Pay Now](https://pay.kermitcity.gov/checkout?acc=01-00600-00&amt=105.75)", unsafe_allow_html=True)
+                st.session_state.step = 2
+            else:
+                st.warning("No unpaid bills found for that address.")
 
-# Step 2: Email + Payment link
-if st.session_state.step == 2:
-    st.markdown("### 📨 Where should we send your receipt?")
-    email_input = st.text_input("Email Address", placeholder="e.g., you@example.com")
-    if st.button("Generate Payment Link") and email_input:
-        st.session_state.email = email_input
-        st.session_state.step = 3
+    elif intent == "Pay a ticket":
+        st.markdown("""
+        🚓 No worries — I can help you pay your ticket.
+        Can you enter your ticket number or license plate?
+        """)
+        ticket_id = st.text_input("Ticket Number / Plate")
+        if st.button("Check Ticket") and ticket_id:
+            st.success("✅ You have a parking ticket for $65.00 issued on May 2. Due: May 30.")
+            st.markdown("[💳 Pay Ticket Now](https://pay.kermitcity.gov/ticket/checkout?ref=XYZ123)", unsafe_allow_html=True)
 
-# Step 3: Show payment link
-if st.session_state.step == 3:
-    st.success(f"✅ Thank you! A receipt will be sent to **{st.session_state.email}** after payment.")
-    st.markdown("[💳 Click here to Pay Now](https://pay.kermitcity.gov/checkout?acc=01-00600-00&amt=105.75)", unsafe_allow_html=True)
-    if st.button("Start Over"):
-        for key in st.session_state:
-            st.session_state[key] = None
-        st.session_state.step = 0
+    elif intent == "Apply for a permit":
+        st.markdown("""
+        📝 I can help you apply for a permit. What kind?
+        """)
+        permit_type = st.selectbox("Permit Type", ["Garage Sale", "Event", "Construction", "Other"])
+        if st.button("Start Application"):
+            st.info(f"Permit form for **{permit_type}** will be opened here soon. (Prototype stub)")
+
+    elif intent == "Report a city issue":
+        issue_type = st.selectbox("What would you like to report?", ["Pothole", "Streetlight Out", "Water Leak", "Graffiti", "Other"])
+        location = st.text_input("Where is the issue located?")
+        if st.button("Submit Report") and location:
+            st.success(f"📨 Your report about '{issue_type}' at '{location}' has been submitted to the City. Thank you!")
+
+    elif intent == "Something else":
+        st.text_area("Please describe your issue or request")
+        if st.button("Send to City Clerk"):
+            st.success("Thank you! A city staff member will review and follow up shortly.")
+
+# Optional reset
+st.sidebar.button("🔁 Restart", on_click=lambda: st.session_state.clear())
