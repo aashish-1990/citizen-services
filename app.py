@@ -1,4 +1,4 @@
-# Enhanced Streamlit UI for LIA – Gov2Biz-style Multi-Service Chatbot with Avatars, Help, TTS, and Browser Voice Input (Improved for Streamlit Cloud)
+# Enhanced Streamlit UI for LIA – Gov2Biz-style Multi-Service Chatbot with Debug Logs
 import streamlit as st
 import streamlit.components.v1 as components
 
@@ -11,21 +11,28 @@ if "step" not in st.session_state:
 if "intent" not in st.session_state:
     st.session_state.intent = None
 
-# Voice Welcome on Load (Robust version)
+st.write("[DEBUG] Current step:", st.session_state.step)
+st.write("[DEBUG] Current intent:", st.session_state.intent)
+
+# Voice Welcome on Load (with logs)
 components.html("""
 <script>
 window.onload = function() {
+  console.log("[DEBUG] Page loaded. Initializing welcome voice...");
   const speakWelcome = () => {
     const msg = new SpeechSynthesisUtterance("Hi there! I'm LIA, your assistant from the City of Kermit. How can I help you today?");
     const voices = speechSynthesis.getVoices();
+    console.log("[DEBUG] Loaded voices:", voices);
     msg.voice = voices.find(v => v.name.includes('Female')) || voices[0];
     msg.lang = 'en-US';
     msg.pitch = 1.2;
     msg.rate = 1;
     speechSynthesis.speak(msg);
+    console.log("[DEBUG] Welcome message spoken");
   }
   if (speechSynthesis.getVoices().length === 0) {
     speechSynthesis.onvoiceschanged = speakWelcome;
+    console.log("[DEBUG] Waiting for voices to load...");
   } else {
     speakWelcome();
   }
@@ -44,11 +51,12 @@ st.markdown("""<style>
 }
 </style>""", unsafe_allow_html=True)
 
-# Browser-based voice input with JS → Streamlit integration
+# Voice input with debug logs
 components.html("""
 <script>
   let recognition;
   function startListening() {
+    console.log("[DEBUG] Voice button clicked");
     if (!('webkitSpeechRecognition' in window)) {
       alert("Your browser doesn't support voice recognition. Try using Chrome.");
       return;
@@ -58,24 +66,30 @@ components.html("""
     recognition.interimResults = false;
     recognition.lang = "en-US";
     recognition.start();
+    console.log("[DEBUG] Voice recognition started");
     recognition.onresult = function(event) {
       const transcript = event.results[0][0].transcript;
+      console.log("[DEBUG] Voice input captured:", transcript);
       const input = document.getElementById("voice_input");
       input.value = transcript;
       input.dispatchEvent(new Event("input", { bubbles: true }));
       document.getElementById("submit_voice_btn").click();
     };
+    recognition.onerror = function(event) {
+      console.error("[ERROR] Voice recognition error:", event);
+    }
   }
 </script>
 <button onclick="startListening()">🎤 Speak to LIA</button>
 <br><input type="text" id="voice_input" style="display:none"/>
 <button id="submit_voice_btn" style="display:none" onclick="document.forms[0].dispatchEvent(new Event('submit'))">Submit</button>
-""", height=100)
+""", height=150)
 
 user_input = st.text_input("🎙️ Or type here what you'd like to do:", key="voice_input")
 
 if user_input:
     st.success(f"You said: {user_input}")
+    st.write("[DEBUG] User input received:", user_input)
     user_lower = user_input.lower()
     if "bill" in user_lower:
         st.session_state.intent = "Pay a utility bill"
@@ -113,6 +127,7 @@ if st.session_state.step == 0:
 
     if st.button("Continue"):
         st.session_state.step = 1
+        st.write("[DEBUG] 'Continue' button clicked, step updated to 1")
 
 # Optional reset
 st.sidebar.button("🔁 Restart", on_click=lambda: st.session_state.clear())
