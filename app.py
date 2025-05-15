@@ -17,6 +17,8 @@ if "context" not in st.session_state:
     st.session_state.context = {}
 if "is_admin" not in st.session_state:
     st.session_state.is_admin = False
+if "email" not in st.session_state:
+    st.session_state.email = ""
 
 # Admin toggle
 st.sidebar.markdown("### Admin Panel")
@@ -68,8 +70,7 @@ if not st.session_state.is_admin:
                 st.session_state.context['address'] = address
                 st.success(f"✅ Bill found for {address}. Amount due: $82.35")
                 if st.button("💳 Pay Now"):
-                    st.success("Payment successful! Receipt sent to your email.")
-                    st.session_state.step = 2
+                    st.session_state.step = 1.1
 
         elif intent == "pay_ticket":
             ticket = st.text_input("🚓 Enter your ticket or plate number:")
@@ -77,8 +78,7 @@ if not st.session_state.is_admin:
                 st.session_state.context['ticket'] = ticket
                 st.success(f"✅ Ticket {ticket} found. Fine: $45.00")
                 if st.button("💳 Pay Ticket"):
-                    st.success("Payment successful! Ticket cleared.")
-                    st.session_state.step = 2
+                    st.session_state.step = 1.2
 
         elif intent == "apply_permit":
             permit_type = st.selectbox("📝 Select permit type:", ["Garage Sale", "Construction", "Event", "Other"])
@@ -103,6 +103,20 @@ if not st.session_state.is_admin:
             if st.button("⬅️ Start Over"):
                 st.session_state.step = 0
 
+    elif st.session_state.step == 1.1:  # After Pay Bill
+        email = st.text_input("📧 Where should we send the receipt?")
+        if email:
+            st.session_state.email = email
+            st.success(f"Payment successful! Receipt sent to {email}.")
+            st.session_state.step = 2
+
+    elif st.session_state.step == 1.2:  # After Pay Ticket
+        email = st.text_input("📧 Where should we send the ticket confirmation?")
+        if email:
+            st.session_state.email = email
+            st.success(f"Ticket payment successful! Confirmation sent to {email}.")
+            st.session_state.step = 2
+
     elif st.session_state.step == 2:
         st.markdown("""
         <div class='chat-bubble'>
@@ -111,7 +125,22 @@ if not st.session_state.is_admin:
         """, unsafe_allow_html=True)
         for k, v in st.session_state.context.items():
             st.markdown(f"**{k.capitalize()}:** {v}")
-        st.button("⬅️ Start New Request", on_click=lambda: st.session_state.clear())
+        if st.session_state.email:
+            st.markdown(f"**Receipt sent to:** {st.session_state.email}")
+        st.markdown("""
+        ---
+        Would you like to do anything else?
+        """)
+        if st.button("💧 Pay another utility bill"):
+            st.session_state.update(step=1, intent="pay_bill")
+        if st.button("🚓 Pay another ticket"):
+            st.session_state.update(step=1, intent="pay_ticket")
+        if st.button("📝 Apply for a permit"):
+            st.session_state.update(step=1, intent="apply_permit")
+        if st.button("🔧 Report an issue"):
+            st.session_state.update(step=1, intent="report_issue")
+        if st.button("🏠 Return to main menu"):
+            st.session_state.clear()
 
 # Admin Mode: Placeholder mock view
 else:
