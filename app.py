@@ -1,12 +1,6 @@
-# Enhanced Streamlit UI for LIA – Gov2Biz-style Multi-Service Chatbot with Avatars, Help, Real-Time Voice Input (WebRTC), and TTS
+# Enhanced Streamlit UI for LIA – Gov2Biz-style Multi-Service Chatbot with Avatars, Help, TTS, and Browser Voice Input (Streamlit Cloud Friendly)
 import streamlit as st
 import streamlit.components.v1 as components
-from streamlit_webrtc import webrtc_streamer, WebRtcMode, ClientSettings
-import av
-import numpy as np
-import queue
-import threading
-import whisper
 
 st.set_page_config(page_title="LIA – City Assistant", layout="centered")
 st.image("https://cdn-icons-png.flaticon.com/512/4712/4712107.png", width=80)
@@ -17,13 +11,7 @@ if "step" not in st.session_state:
 if "intent" not in st.session_state:
     st.session_state.intent = None
 
-st.markdown("""
-<audio autoplay>
-  <source src="https://github.com/audiojs/audiojs/raw/master/audio/hello-welcome-kermit.mp3" type="audio/mpeg">
-  Your browser does not support the audio element.
-</audio>
-""", unsafe_allow_html=True)
-
+# Voice Welcome on Load
 components.html("""
 <script>
 window.onload = function() {
@@ -42,6 +30,7 @@ window.onload = function() {
 </script>
 """, height=0)
 
+# Chat style
 st.markdown("""<style>
 .chat-bubble {
   background-color: #f1f1f1;
@@ -52,61 +41,51 @@ st.markdown("""<style>
 }
 </style>""", unsafe_allow_html=True)
 
-# Whisper transcription handler
-result_queue = queue.Queue()
-model = whisper.load_model("base")
+# Browser-based voice input
+components.html("""
+<script>
+  let recognition;
+  function startListening() {
+    if (!('webkitSpeechRecognition' in window)) {
+      alert("Your browser doesn't support voice recognition. Try using Chrome.");
+      return;
+    }
+    recognition = new webkitSpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = "en-US";
+    recognition.start();
+    recognition.onresult = function(event) {
+      const transcript = event.results[0][0].transcript;
+      const input = document.getElementById("voice_input");
+      input.value = transcript;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+  }
+</script>
+<button onclick="startListening()">🎤 Speak to LIA</button>
+""", height=100)
 
-class AudioProcessor:
-    def __init__(self):
-        self.buffer = queue.Queue()
+user_input = st.text_input("🎙️ Or type here what you'd like to do:", key="voice_input")
 
-    def recv(self, frame):
-        audio = frame.to_ndarray()
-        audio = audio.mean(axis=1).astype(np.int16)  # Mono
-        self.buffer.put(audio)
-        return av.AudioFrame.from_ndarray(audio, layout="mono")
-
-    def transcribe_background(self):
-        while True:
-            audio_chunk = []
-            while not self.buffer.empty():
-                audio_chunk.extend(self.buffer.get())
-            if audio_chunk:
-                try:
-                    audio_np = np.array(audio_chunk, dtype=np.float32) / 32768.0
-                    result = model.transcribe(audio_np, language='en')
-                    result_queue.put(result['text'])
-                except Exception as e:
-                    result_queue.put(f"[ERROR] {e}")
-            else:
-                result_queue.put("")
-
-ap = AudioProcessor()
-th = threading.Thread(target=ap.transcribe_background, daemon=True)
-th.start()
-
-st.markdown("### 🎤 Speak to LIA")
-webrtc_streamer(key="mic", mode=WebRtcMode.SENDONLY, client_settings=ClientSettings(media_stream_constraints={"audio": True, "video": False}), audio_processor_factory=lambda: ap)
-
-if not result_queue.empty():
-    transcript = result_queue.get()
-    if transcript:
-        st.success(f"You said: {transcript}")
-        if "bill" in transcript.lower():
-            st.session_state.intent = "Pay a utility bill"
-            st.session_state.step = 1
-        elif "ticket" in transcript.lower():
-            st.session_state.intent = "Pay a ticket"
-            st.session_state.step = 1
-        elif "permit" in transcript.lower():
-            st.session_state.intent = "Apply for a permit"
-            st.session_state.step = 1
-        elif "report" in transcript.lower() or "issue" in transcript.lower():
-            st.session_state.intent = "Report a city issue"
-            st.session_state.step = 1
-        else:
-            st.session_state.intent = "Something else"
-            st.session_state.step = 1
+if user_input:
+    st.success(f"You said: {user_input}")
+    user_lower = user_input.lower()
+    if "bill" in user_lower:
+        st.session_state.intent = "Pay a utility bill"
+        st.session_state.step = 1
+    elif "ticket" in user_lower:
+        st.session_state.intent = "Pay a ticket"
+        st.session_state.step = 1
+    elif "permit" in user_lower:
+        st.session_state.intent = "Apply for a permit"
+        st.session_state.step = 1
+    elif "report" in user_lower or "issue" in user_lower:
+        st.session_state.intent = "Report a city issue"
+        st.session_state.step = 1
+    else:
+        st.session_state.intent = "Something else"
+        st.session_state.step = 1
 
 # Step 0: Friendly multi-intent welcome message
 if st.session_state.step == 0:
