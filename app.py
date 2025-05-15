@@ -1,108 +1,126 @@
-# Streamlined Streamlit UI for LIA – Chat-Only Version with Full Flow
+# Streamlit UI for LIA – Prototype to Showcase Conversational Flows
 import streamlit as st
+import uuid
 
-st.set_page_config(page_title="LIA – City Assistant", layout="centered")
+st.set_page_config(page_title="LIA – City Assistant Prototype", layout="centered")
 st.image("https://cdn-icons-png.flaticon.com/512/4712/4712107.png", width=80)
 st.title("🤖 Meet LIA – Your City of Kermit Assistant")
 
+# Session state initialization
+if "session_id" not in st.session_state:
+    st.session_state.session_id = str(uuid.uuid4())
 if "step" not in st.session_state:
     st.session_state.step = 0
 if "intent" not in st.session_state:
     st.session_state.intent = None
+if "context" not in st.session_state:
+    st.session_state.context = {}
+if "is_admin" not in st.session_state:
+    st.session_state.is_admin = False
 
-# Chat style
-st.markdown("""<style>
-.chat-bubble {
-  background-color: #f1f1f1;
-  padding: 15px;
-  border-radius: 15px;
-  margin: 10px 0;
-  font-size: 16px;
-}
-</style>""", unsafe_allow_html=True)
-
-user_input = st.text_input("💬 Type what you'd like to do:", key="user_input")
-
-if st.session_state.step == 0:
-    if user_input:
-        st.success(f"You said: {user_input}")
-        user_lower = user_input.lower()
-        if "bill" in user_lower:
-            st.session_state.intent = "Pay a utility bill"
-            st.session_state.step = 1
-        elif "ticket" in user_lower:
-            st.session_state.intent = "Pay a ticket"
-            st.session_state.step = 1
-        elif "permit" in user_lower:
-            st.session_state.intent = "Apply for a permit"
-            st.session_state.step = 1
-        elif "report" in user_lower or "issue" in user_lower:
-            st.session_state.intent = "Report a city issue"
-            st.session_state.step = 1
-        else:
-            st.session_state.intent = "Something else"
-            st.session_state.step = 1
-
-# Step 0: Friendly multi-intent welcome message
-if st.session_state.step == 0:
-    st.markdown('<div class="chat-bubble">👋 Hello there! I\'m <b>LIA</b>, your friendly assistant from the City of Kermit.<br><br>'
-                'I can help you with:<br>'
-                '1️⃣ Pay a utility bill<br>'
-                '2️⃣ Pay a traffic or parking ticket<br>'
-                '3️⃣ Apply for a permit (like garage sale or construction)<br>'
-                '4️⃣ Report an issue (e.g., pothole, light outage)<br>'
-                '5️⃣ Something else</div>', unsafe_allow_html=True)
-
-    st.session_state.intent = st.radio("What would you like help with?", [
-        "Pay a utility bill",
-        "Pay a ticket",
-        "Apply for a permit",
-        "Report a city issue",
-        "Something else"
-    ])
-
-    if st.button("Continue"):
-        st.session_state.step = 1
-
-# Step 1: Flows based on intent
-if st.session_state.step == 1:
-    if st.session_state.intent == "Pay a utility bill":
-        st.markdown("### 💧 Let's help you pay your utility bill")
-        address = st.text_input("Please enter your service address:", key="address")
-        if address:
-            st.success(f"Bill found for {address}. Amount due: $82.35")
-            st.button("💳 Pay Now")
-        st.button("⬅️ Go Back", on_click=lambda: st.session_state.update(step=0))
-
-    elif st.session_state.intent == "Pay a ticket":
-        st.markdown("### 🚓 Enter your ticket number or plate:")
-        ticket = st.text_input("Ticket Number or Plate", key="ticket")
-        if ticket:
-            st.success(f"Ticket {ticket} found. Amount due: $45.00")
-            st.button("💳 Pay Now")
-        st.button("⬅️ Go Back", on_click=lambda: st.session_state.update(step=0))
-
-    elif st.session_state.intent == "Apply for a permit":
-        st.markdown("### 📝 Select Permit Type")
-        permit = st.selectbox("Permit Type", ["Garage Sale", "Construction", "Event", "Other"])
-        st.text_input("Enter address for permit")
-        st.date_input("Start Date")
-        st.date_input("End Date")
-        st.button("Submit Application")
-        st.button("⬅️ Go Back", on_click=lambda: st.session_state.update(step=0))
-
-    elif st.session_state.intent == "Report a city issue":
-        st.markdown("### 🛠️ Report an issue")
-        issue = st.selectbox("Issue Type", ["Pothole", "Streetlight Out", "Water Leak", "Other"])
-        location = st.text_input("Issue Location")
-        description = st.text_area("Describe the issue")
-        st.button("Submit Report")
-        st.button("⬅️ Go Back", on_click=lambda: st.session_state.update(step=0))
-
-    else:
-        st.text_area("Please describe your issue")
-        st.button("Send to City Clerk")
-        st.button("⬅️ Go Back", on_click=lambda: st.session_state.update(step=0))
-
-# Optional reset
+# Admin toggle
+st.sidebar.markdown("### Admin Panel")
+st.session_state.is_admin = st.sidebar.toggle("Switch to Admin Mode")
 st.sidebar.button("🔁 Restart", on_click=lambda: st.session_state.clear())
+
+# Citizen Mode: Intent detection and flows
+if not st.session_state.is_admin:
+    user_input = st.text_input("💬 What would you like to do today?")
+
+    if st.session_state.step == 0:
+        if user_input:
+            user_lower = user_input.lower()
+            if "bill" in user_lower:
+                st.session_state.intent = "pay_bill"
+                st.session_state.step = 1
+            elif "ticket" in user_lower:
+                st.session_state.intent = "pay_ticket"
+                st.session_state.step = 1
+            elif "permit" in user_lower:
+                st.session_state.intent = "apply_permit"
+                st.session_state.step = 1
+            elif "report" in user_lower or "issue" in user_lower:
+                st.session_state.intent = "report_issue"
+                st.session_state.step = 1
+            else:
+                st.session_state.intent = "unknown"
+                st.session_state.step = 1
+
+    if st.session_state.step == 0:
+        st.markdown("""
+        <div class='chat-bubble'>
+        👋 Hi! I’m LIA, your local assistant. You can ask me to:
+        <ul>
+            <li>💧 Pay a utility bill</li>
+            <li>🚓 Pay a ticket</li>
+            <li>📝 Apply for a permit</li>
+            <li>🔧 Report a city issue</li>
+        </ul>
+        </div>
+        """, unsafe_allow_html=True)
+
+    elif st.session_state.step == 1:
+        intent = st.session_state.intent
+
+        if intent == "pay_bill":
+            address = st.text_input("📍 Enter your address to locate your bill:")
+            if address:
+                st.session_state.context['address'] = address
+                st.success(f"✅ Bill found for {address}. Amount due: $82.35")
+                if st.button("💳 Pay Now"):
+                    st.success("Payment successful! Receipt sent to your email.")
+                    st.session_state.step = 2
+
+        elif intent == "pay_ticket":
+            ticket = st.text_input("🚓 Enter your ticket or plate number:")
+            if ticket:
+                st.session_state.context['ticket'] = ticket
+                st.success(f"✅ Ticket {ticket} found. Fine: $45.00")
+                if st.button("💳 Pay Ticket"):
+                    st.success("Payment successful! Ticket cleared.")
+                    st.session_state.step = 2
+
+        elif intent == "apply_permit":
+            permit_type = st.selectbox("📝 Select permit type:", ["Garage Sale", "Construction", "Event", "Other"])
+            address = st.text_input("📍 Enter address for the permit:")
+            date_range = st.date_input("📅 Permit Date Range", [])
+            if permit_type and address and len(date_range) == 2:
+                if st.button("Submit Application"):
+                    st.success(f"Permit request for {permit_type} submitted for {address}.")
+                    st.session_state.step = 2
+
+        elif intent == "report_issue":
+            issue_type = st.selectbox("⚠️ Issue Type", ["Pothole", "Streetlight Out", "Water Leak", "Other"])
+            location = st.text_input("📍 Issue Location")
+            details = st.text_area("📝 Describe the issue")
+            if issue_type and location:
+                if st.button("Report Issue"):
+                    st.success(f"Thanks! Your report has been submitted to the city team.")
+                    st.session_state.step = 2
+
+        elif intent == "unknown":
+            st.warning("🤔 I’m not sure how to help with that. Try saying 'pay my bill' or 'get a permit'.")
+            if st.button("⬅️ Start Over"):
+                st.session_state.step = 0
+
+    elif st.session_state.step == 2:
+        st.markdown("""
+        <div class='chat-bubble'>
+        🎉 Thanks for using LIA! Here’s what we helped you with today:
+        </div>
+        """, unsafe_allow_html=True)
+        for k, v in st.session_state.context.items():
+            st.markdown(f"**{k.capitalize()}:** {v}")
+        st.button("⬅️ Start New Request", on_click=lambda: st.session_state.clear())
+
+# Admin Mode: Placeholder mock view
+else:
+    st.markdown("""
+    ### 🧑‍💼 Admin Console
+    View recent citizen intents and simulate approvals.
+    """)
+    st.success("💧 Citizen request: Pay Bill for 123 Olive Street → $82.35")
+    st.success("📝 Permit request: Garage Sale at 25 Elm Road")
+    st.success("⚠️ Issue reported: Pothole at Main & 3rd")
+    st.button("Approve Permit")
+    st.button("Mark Issue as Resolved")
