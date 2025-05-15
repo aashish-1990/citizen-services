@@ -1,4 +1,4 @@
-# Enhanced Streamlit UI for LIA – Gov2Biz-style Multi-Service Chatbot with Avatars, Help, TTS, and Browser Voice Input (Streamlit Cloud Friendly)
+# Enhanced Streamlit UI for LIA – Gov2Biz-style Multi-Service Chatbot with Avatars, Help, TTS, and Browser Voice Input (Improved for Streamlit Cloud)
 import streamlit as st
 import streamlit.components.v1 as components
 
@@ -11,20 +11,23 @@ if "step" not in st.session_state:
 if "intent" not in st.session_state:
     st.session_state.intent = None
 
-# Voice Welcome on Load
+# Voice Welcome on Load (Robust version)
 components.html("""
 <script>
 window.onload = function() {
-  const msg = new SpeechSynthesisUtterance("Hi there! I'm LIA, your assistant from the City of Kermit. How can I help you today?");
-  const voices = window.speechSynthesis.getVoices();
-  if (!voices.length) {
-    setTimeout(() => speechSynthesis.speak(msg), 500);
-  } else {
+  const speakWelcome = () => {
+    const msg = new SpeechSynthesisUtterance("Hi there! I'm LIA, your assistant from the City of Kermit. How can I help you today?");
+    const voices = speechSynthesis.getVoices();
     msg.voice = voices.find(v => v.name.includes('Female')) || voices[0];
     msg.lang = 'en-US';
     msg.pitch = 1.2;
     msg.rate = 1;
     speechSynthesis.speak(msg);
+  }
+  if (speechSynthesis.getVoices().length === 0) {
+    speechSynthesis.onvoiceschanged = speakWelcome;
+  } else {
+    speakWelcome();
   }
 };
 </script>
@@ -41,7 +44,7 @@ st.markdown("""<style>
 }
 </style>""", unsafe_allow_html=True)
 
-# Browser-based voice input
+# Browser-based voice input with JS → Streamlit integration
 components.html("""
 <script>
   let recognition;
@@ -60,10 +63,13 @@ components.html("""
       const input = document.getElementById("voice_input");
       input.value = transcript;
       input.dispatchEvent(new Event("input", { bubbles: true }));
+      document.getElementById("submit_voice_btn").click();
     };
   }
 </script>
 <button onclick="startListening()">🎤 Speak to LIA</button>
+<br><input type="text" id="voice_input" style="display:none"/>
+<button id="submit_voice_btn" style="display:none" onclick="document.forms[0].dispatchEvent(new Event('submit'))">Submit</button>
 """, height=100)
 
 user_input = st.text_input("🎙️ Or type here what you'd like to do:", key="voice_input")
