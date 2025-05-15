@@ -87,7 +87,7 @@ if not st.session_state.is_admin:
             if permit_type and address and len(date_range) == 2:
                 if st.button("Submit Application"):
                     st.success(f"Permit request for {permit_type} submitted for {address}.")
-                    st.session_state.step = 2
+                    st.session_state.step = 1.3
 
         elif intent == "report_issue":
             issue_type = st.selectbox("⚠️ Issue Type", ["Pothole", "Streetlight Out", "Water Leak", "Other"])
@@ -96,7 +96,7 @@ if not st.session_state.is_admin:
             if issue_type and location:
                 if st.button("Report Issue"):
                     st.success(f"Thanks! Your report has been submitted to the city team.")
-                    st.session_state.step = 2
+                    st.session_state.step = 1.4
 
         elif intent == "unknown":
             st.warning("🤔 I’m not sure how to help with that. Try saying 'pay my bill' or 'get a permit'.")
@@ -115,6 +115,20 @@ if not st.session_state.is_admin:
         if email:
             st.session_state.email = email
             st.success(f"Ticket payment successful! Confirmation sent to {email}.")
+            st.session_state.step = 2
+
+    elif st.session_state.step == 1.3:  # After Permit Submission
+        email = st.text_input("📧 Enter your email for confirmation:")
+        if email:
+            st.session_state.email = email
+            st.success(f"Permit confirmation sent to {email}.")
+            st.session_state.step = 2
+
+    elif st.session_state.step == 1.4:  # After Report Submission
+        email = st.text_input("📧 Enter your email for update notifications:")
+        if email:
+            st.session_state.email = email
+            st.success(f"Issue report logged. Updates will be sent to {email}.")
             st.session_state.step = 2
 
     elif st.session_state.step == 2:
