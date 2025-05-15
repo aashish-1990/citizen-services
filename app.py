@@ -1,5 +1,6 @@
-# Enhanced Streamlit UI for LIA – Gov2Biz-style Multi-Service Chatbot with Avatars & Help
+# Enhanced Streamlit UI for LIA – Gov2Biz-style Multi-Service Chatbot with Avatars, Help, Voice Input, and TTS
 import streamlit as st
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="LIA – City Assistant", layout="centered")
 st.image("https://cdn-icons-png.flaticon.com/512/4712/4712107.png", width=80)
@@ -10,6 +11,28 @@ if "step" not in st.session_state:
 if "intent" not in st.session_state:
     st.session_state.intent = None
 
+# TTS welcome voice (female)
+st.markdown("""
+<audio autoplay>
+  <source src="https://github.com/audiojs/audiojs/raw/master/audio/hello-welcome-kermit.mp3" type="audio/mpeg">
+  Your browser does not support the audio element.
+</audio>
+""", unsafe_allow_html=True)
+
+# Custom welcome voice text using JS TTS
+components.html("""
+<script>
+window.onload = function() {
+  const msg = new SpeechSynthesisUtterance("Hi there! I'm LIA, your assistant from the City of Kermit. How can I help you today?");
+  msg.voice = speechSynthesis.getVoices().find(voice => voice.name.includes('Google') && voice.name.includes('Female')) || speechSynthesis.getVoices()[0];
+  msg.lang = 'en-US';
+  msg.pitch = 1.2;
+  msg.rate = 1;
+  speechSynthesis.speak(msg);
+};
+</script>
+""", height=0)
+
 st.markdown("""<style>
 .chat-bubble {
   background-color: #f1f1f1;
@@ -19,6 +42,32 @@ st.markdown("""<style>
   font-size: 16px;
 }
 </style>""", unsafe_allow_html=True)
+
+# Voice recorder script
+st.markdown("""
+<script>
+  let recognition;
+  function startListening() {
+    if (!('webkitSpeechRecognition' in window)) {
+      alert("Your browser doesn't support voice recognition. Try using Chrome.");
+      return;
+    }
+    recognition = new webkitSpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = "en-US";
+    recognition.start();
+    recognition.onresult = function(event) {
+      const transcript = event.results[0][0].transcript;
+      document.getElementById("voice_result").value = transcript;
+      document.getElementById("submit_voice").click();
+    };
+  }
+</script>
+<button onclick="startListening()">🎤 Speak to LIA</button>
+<br><input type="text" id="voice_result" style="display:none"/>
+<button id="submit_voice" style="display:none" onclick="document.forms[0].submit();">Submit</button>
+""", unsafe_allow_html=True)
 
 # Step 0: Friendly multi-intent welcome message
 if st.session_state.step == 0:
@@ -40,54 +89,6 @@ if st.session_state.step == 0:
 
     if st.button("Continue"):
         st.session_state.step = 1
-
-# Step 1: Route by Intent
-if st.session_state.step == 1:
-    intent = st.session_state.intent
-    st.button("❓ Help", help="You can click Go Back to return to the home menu at any time.")
-
-    if intent == "Pay a utility bill":
-        st.markdown('<div class="chat-bubble">💧 Great! Let\'s look up your bill.<br>'
-                    'Could you please enter the address where you receive the service?</div>', unsafe_allow_html=True)
-        address_input = st.text_input("Service Address", placeholder="e.g., 123 South Olive Street")
-        if st.button("Find My Bill") and address_input:
-            if "olive" in address_input.lower():
-                st.success("✅ Found one unpaid Water bill for $105.75 due May 31.")
-                st.markdown("[💳 Pay Now](https://pay.kermitcity.gov/checkout?acc=01-00600-00&amt=105.75)", unsafe_allow_html=True)
-                st.button("⬅️ Go Back", on_click=lambda: st.session_state.update(step=0))
-            else:
-                st.warning("No unpaid bills found for that address.")
-                st.button("⬅️ Try Another Address", on_click=lambda: st.session_state.update(step=1))
-
-    elif intent == "Pay a ticket":
-        st.markdown('<div class="chat-bubble">🚓 No worries — I can help you pay your ticket.<br>'
-                    'Can you enter your ticket number or license plate?</div>', unsafe_allow_html=True)
-        ticket_id = st.text_input("Ticket Number / Plate")
-        if st.button("Check Ticket") and ticket_id:
-            st.success("✅ You have a parking ticket for $65.00 issued on May 2. Due: May 30.")
-            st.markdown("[💳 Pay Ticket Now](https://pay.kermitcity.gov/ticket/checkout?ref=XYZ123)", unsafe_allow_html=True)
-            st.button("⬅️ Go Back", on_click=lambda: st.session_state.update(step=0))
-
-    elif intent == "Apply for a permit":
-        st.markdown('<div class="chat-bubble">📝 I can help you apply for a permit. What kind?</div>', unsafe_allow_html=True)
-        permit_type = st.selectbox("Permit Type", ["Garage Sale", "Event", "Construction", "Other"])
-        if st.button("Start Application"):
-            st.info(f"Permit form for **{permit_type}** will be opened here soon. (Prototype stub)")
-            st.button("⬅️ Go Back", on_click=lambda: st.session_state.update(step=0))
-
-    elif intent == "Report a city issue":
-        st.markdown('<div class="chat-bubble">📌 What would you like to report and where?</div>', unsafe_allow_html=True)
-        issue_type = st.selectbox("Issue Type", ["Pothole", "Streetlight Out", "Water Leak", "Graffiti", "Other"])
-        location = st.text_input("Issue Location")
-        if st.button("Submit Report") and location:
-            st.success(f"📨 Your report about '{issue_type}' at '{location}' has been submitted to the City. Thank you!")
-            st.button("⬅️ Report Another Issue", on_click=lambda: st.session_state.update(step=0))
-
-    elif intent == "Something else":
-        st.text_area("Please describe your issue or request")
-        if st.button("Send to City Clerk"):
-            st.success("Thank you! A city staff member will review and follow up shortly.")
-            st.button("⬅️ Back to Main Menu", on_click=lambda: st.session_state.update(step=0))
 
 # Optional reset
 st.sidebar.button("🔁 Restart", on_click=lambda: st.session_state.clear())
