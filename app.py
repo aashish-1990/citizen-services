@@ -70,24 +70,25 @@ components.html("""
 
 user_input = st.text_input("🎙️ Or type here what you'd like to do:", key="voice_input")
 
-if user_input:
-    st.success(f"You said: {user_input}")
-    user_lower = user_input.lower()
-    if "bill" in user_lower:
-        st.session_state.intent = "Pay a utility bill"
-        st.session_state.step = 1
-    elif "ticket" in user_lower:
-        st.session_state.intent = "Pay a ticket"
-        st.session_state.step = 1
-    elif "permit" in user_lower:
-        st.session_state.intent = "Apply for a permit"
-        st.session_state.step = 1
-    elif "report" in user_lower or "issue" in user_lower:
-        st.session_state.intent = "Report a city issue"
-        st.session_state.step = 1
-    else:
-        st.session_state.intent = "Something else"
-        st.session_state.step = 1
+if st.session_state.step == 0:
+    if user_input:
+        st.success(f"You said: {user_input}")
+        user_lower = user_input.lower()
+        if "bill" in user_lower:
+            st.session_state.intent = "Pay a utility bill"
+            st.session_state.step = 1
+        elif "ticket" in user_lower:
+            st.session_state.intent = "Pay a ticket"
+            st.session_state.step = 1
+        elif "permit" in user_lower:
+            st.session_state.intent = "Apply for a permit"
+            st.session_state.step = 1
+        elif "report" in user_lower or "issue" in user_lower:
+            st.session_state.intent = "Report a city issue"
+            st.session_state.step = 1
+        else:
+            st.session_state.intent = "Something else"
+            st.session_state.step = 1
 
 # Step 0: Friendly multi-intent welcome message
 if st.session_state.step == 0:
@@ -109,6 +110,34 @@ if st.session_state.step == 0:
 
     if st.button("Continue"):
         st.session_state.step = 1
+
+# Step 1: Utility bill flow (placeholder)
+if st.session_state.step == 1:
+    if st.session_state.intent == "Pay a utility bill":
+        st.markdown("### 💧 Let's help you pay your utility bill")
+        st.text_input("Please enter your service address:")
+        st.button("🔍 Find My Bill")
+        st.button("⬅️ Go Back", on_click=lambda: st.session_state.update(step=0))
+    elif st.session_state.intent == "Pay a ticket":
+        st.markdown("### 🚓 Enter your ticket number or plate:")
+        st.text_input("Ticket Number or Plate")
+        st.button("🔍 Look Up Ticket")
+        st.button("⬅️ Go Back", on_click=lambda: st.session_state.update(step=0))
+    elif st.session_state.intent == "Apply for a permit":
+        st.markdown("### 📝 Select Permit Type")
+        st.selectbox("Permit Type", ["Garage Sale", "Construction", "Event", "Other"])
+        st.button("Start Application")
+        st.button("⬅️ Go Back", on_click=lambda: st.session_state.update(step=0))
+    elif st.session_state.intent == "Report a city issue":
+        st.markdown("### 🛠️ Report an issue")
+        st.selectbox("Issue Type", ["Pothole", "Streetlight Out", "Water Leak", "Other"])
+        st.text_input("Issue Location")
+        st.button("Submit Report")
+        st.button("⬅️ Go Back", on_click=lambda: st.session_state.update(step=0))
+    else:
+        st.text_area("Please describe your issue")
+        st.button("Send to City Clerk")
+        st.button("⬅️ Go Back", on_click=lambda: st.session_state.update(step=0))
 
 # Optional reset
 st.sidebar.button("🔁 Restart", on_click=lambda: st.session_state.clear())
