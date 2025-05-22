@@ -1,146 +1,164 @@
-# LIA – Agentic Assistant (Streamlit-Only Version for Render Hosting)
-
-import streamlit as st
-import uuid
-import time
+from fastapi import FastAPI
+from pydantic import BaseModel
+from typing import Dict, List, Optional
+from fastapi.middleware.cors import CORSMiddleware
 import logging
+import time
+
+app = FastAPI()
+
+# === CORS for frontend integration ===
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # === Logging Setup ===
-logging.basicConfig(
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
-logger = logging.getLogger("lia-streamlit")
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("lia")
 
-# === Session State Initialization ===
-if "session_id" not in st.session_state:
-    st.session_state.session_id = str(uuid.uuid4())
-if "step" not in st.session_state:
-    st.session_state.step = 0
-if "intent" not in st.session_state:
-    st.session_state.intent = None
-if "context" not in st.session_state:
-    st.session_state.context = {}
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+# === Memory per session ===
+memory: Dict[str, List[str]] = {}
+session_state: Dict[str, Dict] = {}
 
-# === UI Functions ===
-def lia_say(message):
-    st.session_state.messages.append(("LIA", message))
-    logger.info(f"LIA: {message}")
+# === Request/Response Models ===
+class ChatRequest(BaseModel):
+    user_input: str
+    session_id: str
 
-def user_say(message):
-    st.session_state.messages.append(("User", message))
-    logger.info(f"User: {message}")
+class ChatResponse(BaseModel):
+    response: str
+    memory: List[str]
 
-def reset_conversation():
-    st.session_state.step = 0
-    st.session_state.intent = None
-    st.session_state.context = {}
-    st.session_state.messages = []
-    st.rerun()
-
-# === Layout ===
-st.set_page_config(page_title="LIA – City Assistant", layout="centered")
-st.sidebar.button("🔁 Restart Conversation", on_click=reset_conversation)
-st.title("🤖 Meet LIA – Your City of Kermit Assistant")
-
-# === Display Messages ===
-for sender, msg in st.session_state.messages:
-    if sender == "LIA":
-        with st.chat_message("assistant"):
-            st.markdown(f"**🟣 LIA:** {msg}")
+# === Intent Detection ===
+def detect_intent(text: str) -> str:
+    text = text.lower()
+    if "bill" in text and "pay" in text:
+        return "pay_bill"
+    elif "ticket" in text:
+        return "pay_ticket"
+    elif "permit" in text:
+        return "apply_permit"
+    elif "report" in text or "leak" in text:
+        return "report_issue"
+    elif text in ["yes", "no"]:
+        return "confirm"
     else:
-        with st.chat_message("user"):
-            st.markdown(f"**🟢 You:** {msg}")
+        return "unknown"
 
-# === Chat Logic ===
-def process_input(user_input):
-    user_say(user_input)
-    step = st.session_state.step
-    intent = st.session_state.intent
-    context = st.session_state.context
+# === Chat Engine ===
+@app.post("/chat", response_model=ChatResponse)
+def chat(req: ChatRequest):
+    session_id = req.session_id
+    user_input = req.user_input.strip()
+    logger.info(f"[{session_id}] User: {user_input}")
 
+    if session_id not in memory:
+        memory[session_id] = []
+        session_state[session_id] = {
+            "step": 0,
+            "intent": None,
+            "context": {}
+        }
+
+    mem = memory[session_id]
+    state = session_state[session_id]
+    step = state["step"]
+    intent = state["intent"]
+    ctx = state["context"]
+
+    mem.append(f"🟢 You: {user_input}")
+
+    # Step 0 - Detect Intent
     if step == 0:
-        # Show welcome + get intent
-        if any(x in user_input.lower() for x in ["bill", "pay"]):
-            st.session_state.intent = "pay_bill"
-            st.session_state.step = 1
-            lia_say("Sure! Please enter your address to locate your bill.")
-        elif "permit" in user_input.lower():
-            st.session_state.intent = "apply_permit"
-            st.session_state.step = 1
-            lia_say("What type of permit are you applying for?")
-        elif "ticket" in user_input.lower():
-            st.session_state.intent = "pay_ticket"
-            st.session_state.step = 1
-            lia_say("Please provide your ticket or plate number.")
-        elif "report" in user_input.lower() or "issue" in user_input.lower():
-            st.session_state.intent = "report_issue"
-            st.session_state.step = 1
-            lia_say("What issue would you like to report?")
-        else:
-            lia_say("I didn’t quite catch that. You can ask me to pay a bill, apply for a permit, or report an issue.")
+        intent = detect_intent(user_input)
+        state["intent"] = intent
 
-    elif step == 1:
-        # Handle next step based on intent
         if intent == "pay_bill":
-            context["address"] = user_input
-            if any(x in user_input.lower() for x in ["olive", "pine", "main", "123"]):
-                lia_say(f"✅ Bill found for {user_input}. Amount due: $82.35. Is this correct?")
-                st.session_state.step = 2
-            else:
-                lia_say(f"❌ No bill found for {user_input}. Try again.")
-        elif intent == "apply_permit":
-            context["permit_type"] = user_input
-            lia_say("Got it. What is the address for the permit?")
-            st.session_state.step = 2
-        elif intent == "pay_ticket":
-            context["ticket_id"] = user_input
-            lia_say(f"✅ Ticket {user_input} found. Fine: $45.00. Do you want to proceed to payment?")
-            st.session_state.step = 2
-        elif intent == "report_issue":
-            context["issue"] = user_input
-            lia_say("Please provide the location of this issue.")
-            st.session_state.step = 2
+            response = "Sure! Please share your address."
+            state["step"] = 1
 
+        elif intent == "pay_ticket":
+            response = "Please provide your ticket number."
+            state["step"] = 1
+
+        elif intent == "apply_permit":
+            response = "What type of permit would you like to apply for?"
+            state["step"] = 1
+
+        elif intent == "report_issue":
+            response = "What issue would you like to report?"
+            state["step"] = 1
+
+        else:
+            response = "I didn’t catch that. You can say 'I want to pay my bill' or 'report a water leak'."
+
+    # Step 1 - Collect Input
+    elif step == 1:
+        if intent == "pay_bill":
+            ctx["address"] = user_input
+            response = f"Found a bill for $82.35 at {user_input}. Is this correct?"
+            state["step"] = 2
+
+        elif intent == "pay_ticket":
+            ctx["ticket_id"] = user_input
+            response = f"Ticket {user_input} has a fine of $45. Proceed with payment? (yes/no)"
+            state["step"] = 2
+
+        elif intent == "apply_permit":
+            ctx["permit_type"] = user_input
+            response = "What is the address for this permit?"
+            state["step"] = 2
+
+        elif intent == "report_issue":
+            ctx["issue"] = user_input
+            response = "Please share the location of the issue."
+            state["step"] = 2
+
+    # Step 2 - Confirm
     elif step == 2:
         if intent == "pay_bill":
-            if "yes" in user_input.lower():
-                lia_say("💳 A payment link has been sent to your email and phone. Please complete the payment.")
-                time.sleep(1.5)
-                lia_say("✅ Payment confirmed. You can now download your receipt.")
-                st.download_button("📥 Download Receipt", data="Receipt#123-Kermit", file_name="kermit-receipt.txt")
-                lia_say("Do you want to do anything else?")
-                st.session_state.step = 0
-            else:
-                lia_say("Okay, let’s try again. What’s your address?")
-                st.session_state.step = 1
-        elif intent == "apply_permit":
-            context["address"] = user_input
-            lia_say(f"📄 Your {context['permit_type']} permit request for {context['address']} has been submitted.")
-            st.session_state.step = 0
-        elif intent == "pay_ticket":
-            if "yes" in user_input.lower():
-                lia_say("💳 Payment link sent. After payment confirmation, you will receive a receipt.")
+            if user_input.lower() == "yes":
+                response = "Please check your SMS/email for the payment link..."
                 time.sleep(1)
-                lia_say("✅ Ticket paid successfully. Anything else I can help with?")
-                st.session_state.step = 0
+                response += "\n✅ Your payment has been received. Would you like to download the receipt or do something else?"
+                state["step"] = 3
             else:
-                lia_say("Okay. Ticket not paid.")
-                st.session_state.step = 0
+                response = "Okay, what is your address again?"
+                state["step"] = 1
+
+        elif intent == "pay_ticket":
+            if user_input.lower() == "yes":
+                response = "Payment link sent. ✅ Ticket paid. Do you want to pay another ticket?"
+                state["step"] = 3
+            else:
+                response = "Okay. Ticket not paid."
+                state["step"] = 0
+
+        elif intent == "apply_permit":
+            ctx["address"] = user_input
+            response = f"Your {ctx['permit_type']} permit request for {ctx['address']} has been submitted. ✅"
+            state["step"] = 3
+
         elif intent == "report_issue":
-            context["location"] = user_input
-            lia_say(f"🛠️ Issue reported at {context['location']}. Our team will investigate.")
-            st.session_state.step = 0
+            ctx["location"] = user_input
+            response = f"Issue reported at {ctx['location']} – our team will investigate. ✅"
+            state["step"] = 3
 
-# === Chat Input ===
-user_input = st.chat_input("Type your request...")
-if user_input:
-    process_input(user_input)
+    # Step 3 - Wrap Up
+    elif step == 3:
+        if "yes" in user_input.lower():
+            response = "Awesome! What would you like to do next?"
+            state["step"] = 0
+        else:
+            response = "Thank you for using LIA. Goodbye!"
+            state["step"] = 0
 
-# === Initial Greeting ===
-if st.session_state.step == 0 and len(st.session_state.messages) == 0:
-    lia_say("Hi there! I’m LIA — your City of Kermit Assistant. How can I help you today?")
-    time.sleep(0.5)
-    lia_say("You can say things like:\n\n- I want to pay my bill\n- I want to apply for a permit\n- I have a ticket to pay\n- I want to report an issue")
+    else:
+        response = "Something went wrong. Let’s restart. How can I help you today?"
+        state["step"] = 0
+
+    mem.append(f"🟣 LIA: {response}")
+    return ChatResponse(response=response, memory=mem)
