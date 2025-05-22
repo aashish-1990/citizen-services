@@ -1,102 +1,51 @@
-# Streamlit UI for LIA – Simplified & Smooth Prototype
+# streamlit_chatbot.py
 import streamlit as st
+import requests
 import uuid
 
-st.set_page_config(page_title="LIA – City Assistant Prototype", layout="centered")
-st.image("https://cdn-icons-png.flaticon.com/512/4712/4712107.png", width=80)
-st.title("🤖 Meet LIA – Your City of Kermit Assistant")
+st.set_page_config(page_title="LIA – Chat Assistant", layout="centered")
+st.title("🤖 Talk to LIA")
 
-# Session state
+# Initialize session
 if "session_id" not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4())
-if "step" not in st.session_state:
-    st.session_state.step = 0
-if "intent" not in st.session_state:
-    st.session_state.intent = None
-if "context" not in st.session_state:
-    st.session_state.context = {}
-if "is_admin" not in st.session_state:
-    st.session_state.is_admin = False
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
 
-# Sidebar controls
-st.sidebar.markdown("### Admin Panel")
-st.session_state.is_admin = st.sidebar.toggle("Switch to Admin Mode")
-st.sidebar.button("🔁 Restart", on_click=lambda: st.session_state.clear())
+# Input box
+user_input = st.text_input("You:", key="user_input")
 
-# Citizen Mode
-if not st.session_state.is_admin:
-    if st.session_state.step == 0:
-        st.markdown("""
-        👋 Hi! I’m LIA, your assistant. You can ask me to:
-        - 💧 Pay a utility bill
-        - 🚓 Pay a ticket
-        - 📝 Apply for a permit
-        - 🔧 Report an issue
-        """)
-        user_input = st.text_input("💬 What would you like to do?")
-        if user_input:
-            query = user_input.lower()
-            if "bill" in query:
-                st.session_state.intent = "pay_bill"
-            elif "ticket" in query:
-                st.session_state.intent = "pay_ticket"
-            elif "permit" in query:
-                st.session_state.intent = "apply_permit"
-            elif "issue" in query:
-                st.session_state.intent = "report_issue"
-            else:
-                st.warning("I didn’t catch that. Try asking to pay a bill or report an issue.")
-                st.stop()
-            st.session_state.step = 1
+if user_input:
+    # Optional context mock
+    context = {}
+    if "olive" in user_input.lower():
+        context["address"] = "123 Olive Street"
+    elif "ticket" in user_input.lower():
+        context["ticket_id"] = "123"
+    elif "permit" in user_input.lower():
+        context = {
+            "permit_type": "garage sale",
+            "location": "210 Ash Street"
+        }
 
-    elif st.session_state.step == 1:
-        intent = st.session_state.intent
-        if intent == "pay_bill":
-            address = st.text_input("📍 Your address:")
-            if address:
-                st.success(f"✅ Bill for {address}: $82.35")
-                if st.button("💳 Pay Now"):
-                    st.session_state.step = 2
-        elif intent == "pay_ticket":
-            ticket_id = st.text_input("🔢 Ticket or plate number:")
-            if ticket_id:
-                st.success(f"✅ Ticket {ticket_id} found. Fine: $45.00")
-                if st.button("💳 Pay Now"):
-                    st.session_state.step = 2
-        elif intent == "apply_permit":
-            ptype = st.selectbox("📄 Permit type:", ["Garage Sale", "Construction", "Event"])
-            paddr = st.text_input("📍 Permit address:")
-            if ptype and paddr:
-                if st.button("Submit Application"):
-                    st.success("Permit submitted.")
-                    st.session_state.step = 2
-        elif intent == "report_issue":
-            itype = st.selectbox("🛠 Issue:", ["Pothole", "Streetlight", "Leak"])
-            loc = st.text_input("📍 Location:")
-            if itype and loc:
-                if st.button("Submit Report"):
-                    st.success("Thanks for reporting. Our team will check it soon.")
-                    st.session_state.step = 2
+    # Send to FastAPI
+    payload = {
+        "user_input": user_input,
+        "context": context,
+        "session_id": st.session_state.session_id
+    }
 
-    elif st.session_state.step == 2:
-        st.success("✅ Done! Would you like to do something else?")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            if st.button("🏠 Main Menu"):
-                st.session_state.clear()
-        with col2:
-            if st.button("🔁 Repeat This Task"):
-                st.session_state.step = 1
-        with col3:
-            if st.button("❌ Exit"):
-                st.success("Thanks for using LIA!")
+    try:
+        response = requests.post("http://127.0.0.1:8000/chat", json=payload)
+        data = response.json()
+        reply = data["response"]
 
-# Admin View
-else:
-    st.markdown("""
-    ### 🧑‍💼 Admin Console
-    (Sample view only)
-    """)
-    st.info("Bill uploaded for 123 Olive St, $82.35")
-    st.info("Garage Sale Permit requested at 210 Ash Lane")
-    st.info("Pothole reported on 5th & Oak")
+        st.session_state.chat_history.append(f"👤 You: {user_input}")
+        st.session_state.chat_history.append(f"🤖 LIA: {reply}")
+
+    except Exception as e:
+        st.error(f"Failed to connect to LIA backend: {e}")
+
+# Display chat history
+for msg in st.session_state.chat_history:
+    st.markdown(msg)
