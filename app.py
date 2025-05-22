@@ -1,164 +1,99 @@
-from fastapi import FastAPI
+# main.py
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
-from typing import Dict, List, Optional
-from fastapi.middleware.cors import CORSMiddleware
-import logging
 import time
 
 app = FastAPI()
+app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
 
-# === CORS for frontend integration ===
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# === Logging Setup ===
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("lia")
-
-# === Memory per session ===
-memory: Dict[str, List[str]] = {}
-session_state: Dict[str, Dict] = {}
-
-# === Request/Response Models ===
 class ChatRequest(BaseModel):
-    user_input: str
-    session_id: str
+    message: str
 
-class ChatResponse(BaseModel):
-    response: str
-    memory: List[str]
+# Intent memory (in-memory session simulation)
+session = {
+    "intent": None,
+    "step": 0,
+    "context": {}
+}
 
-# === Intent Detection ===
-def detect_intent(text: str) -> str:
-    text = text.lower()
-    if "bill" in text and "pay" in text:
-        return "pay_bill"
-    elif "ticket" in text:
-        return "pay_ticket"
-    elif "permit" in text:
-        return "apply_permit"
-    elif "report" in text or "leak" in text:
-        return "report_issue"
-    elif text in ["yes", "no"]:
-        return "confirm"
-    else:
-        return "unknown"
+@app.get("/", response_class=HTMLResponse)
+def serve_ui(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
 
-# === Chat Engine ===
-@app.post("/chat", response_model=ChatResponse)
-def chat(req: ChatRequest):
-    session_id = req.session_id
-    user_input = req.user_input.strip()
-    logger.info(f"[{session_id}] User: {user_input}")
+@app.post("/chat")
+def chat(request: ChatRequest):
+    user_input = request.message.lower().strip()
+    response = ""
 
-    if session_id not in memory:
-        memory[session_id] = []
-        session_state[session_id] = {
-            "step": 0,
-            "intent": None,
-            "context": {}
-        }
-
-    mem = memory[session_id]
-    state = session_state[session_id]
-    step = state["step"]
-    intent = state["intent"]
-    ctx = state["context"]
-
-    mem.append(f"🟢 You: {user_input}")
-
-    # Step 0 - Detect Intent
-    if step == 0:
-        intent = detect_intent(user_input)
-        state["intent"] = intent
-
-        if intent == "pay_bill":
-            response = "Sure! Please share your address."
-            state["step"] = 1
-
-        elif intent == "pay_ticket":
-            response = "Please provide your ticket number."
-            state["step"] = 1
-
-        elif intent == "apply_permit":
-            response = "What type of permit would you like to apply for?"
-            state["step"] = 1
-
-        elif intent == "report_issue":
+    if session["step"] == 0:
+        if "bill" in user_input:
+            session["intent"] = "pay_bill"
+            session["step"] = 1
+            response = "Sure, please share your address."
+        elif "permit" in user_input:
+            session["intent"] = "apply_permit"
+            session["step"] = 1
+            response = "What type of permit are you applying for?"
+        elif "ticket" in user_input:
+            session["intent"] = "pay_ticket"
+            session["step"] = 1
+            response = "Please share your ticket number."
+        elif "report" in user_input:
+            session["intent"] = "report_issue"
+            session["step"] = 1
             response = "What issue would you like to report?"
-            state["step"] = 1
-
         else:
-            response = "I didn’t catch that. You can say 'I want to pay my bill' or 'report a water leak'."
+            response = "I didn’t catch that. You can say things like 'I want to pay my bill'."
 
-    # Step 1 - Collect Input
-    elif step == 1:
-        if intent == "pay_bill":
-            ctx["address"] = user_input
-            response = f"Found a bill for $82.35 at {user_input}. Is this correct?"
-            state["step"] = 2
+    elif session["step"] == 1:
+        if session["intent"] == "pay_bill":
+            session["context"]["address"] = user_input
+            if any(x in user_input for x in ["123", "main", "olive", "pine"]):
+                session["step"] = 2
+                response = f"Found a bill for $82.35 at {user_input}. Is this correct? (yes/no)"
+            else:
+                response = f"No bill found for {user_input}. Try again."
+        elif session["intent"] == "apply_permit":
+            session["context"]["permit_type"] = user_input
+            session["step"] = 2
+            response = "Please enter the address for the permit."
+        elif session["intent"] == "pay_ticket":
+            session["context"]["ticket"] = user_input
+            session["step"] = 2
+            response = f"Ticket {user_input} found with fine $45.00. Do you want to pay it? (yes/no)"
+        elif session["intent"] == "report_issue":
+            session["context"]["issue"] = user_input
+            session["step"] = 2
+            response = "Please provide the location of this issue."
 
-        elif intent == "pay_ticket":
-            ctx["ticket_id"] = user_input
-            response = f"Ticket {user_input} has a fine of $45. Proceed with payment? (yes/no)"
-            state["step"] = 2
-
-        elif intent == "apply_permit":
-            ctx["permit_type"] = user_input
-            response = "What is the address for this permit?"
-            state["step"] = 2
-
-        elif intent == "report_issue":
-            ctx["issue"] = user_input
-            response = "Please share the location of the issue."
-            state["step"] = 2
-
-    # Step 2 - Confirm
-    elif step == 2:
-        if intent == "pay_bill":
-            if user_input.lower() == "yes":
-                response = "Please check your SMS/email for the payment link..."
+    elif session["step"] == 2:
+        if session["intent"] == "pay_bill":
+            if "yes" in user_input:
                 time.sleep(1)
-                response += "\n✅ Your payment has been received. Would you like to download the receipt or do something else?"
-                state["step"] = 3
+                session["step"] = 3
+                response = "✅ Payment confirmed! Would you like to download the receipt or pay another bill?"
             else:
-                response = "Okay, what is your address again?"
-                state["step"] = 1
-
-        elif intent == "pay_ticket":
-            if user_input.lower() == "yes":
-                response = "Payment link sent. ✅ Ticket paid. Do you want to pay another ticket?"
-                state["step"] = 3
+                session["step"] = 1
+                response = "Okay, please enter your address again."
+        elif session["intent"] == "apply_permit":
+            session["context"]["address"] = user_input
+            session["step"] = 0
+            response = f"✅ Permit application for {session['context']['permit_type']} at {user_input} submitted."
+        elif session["intent"] == "pay_ticket":
+            if "yes" in user_input:
+                time.sleep(1)
+                session["step"] = 0
+                response = "✅ Ticket paid successfully. Anything else I can help with?"
             else:
-                response = "Okay. Ticket not paid."
-                state["step"] = 0
+                session["step"] = 0
+                response = "Okay, ticket payment cancelled."
+        elif session["intent"] == "report_issue":
+            session["context"]["location"] = user_input
+            session["step"] = 0
+            response = f"🛠 Issue at {user_input} reported. Our team will look into it."
 
-        elif intent == "apply_permit":
-            ctx["address"] = user_input
-            response = f"Your {ctx['permit_type']} permit request for {ctx['address']} has been submitted. ✅"
-            state["step"] = 3
-
-        elif intent == "report_issue":
-            ctx["location"] = user_input
-            response = f"Issue reported at {ctx['location']} – our team will investigate. ✅"
-            state["step"] = 3
-
-    # Step 3 - Wrap Up
-    elif step == 3:
-        if "yes" in user_input.lower():
-            response = "Awesome! What would you like to do next?"
-            state["step"] = 0
-        else:
-            response = "Thank you for using LIA. Goodbye!"
-            state["step"] = 0
-
-    else:
-        response = "Something went wrong. Let’s restart. How can I help you today?"
-        state["step"] = 0
-
-    mem.append(f"🟣 LIA: {response}")
-    return ChatResponse(response=response, memory=mem)
+    return JSONResponse(content={"reply": response})
