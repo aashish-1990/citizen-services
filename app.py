@@ -1,137 +1,146 @@
-# LIA – Agentic AI Architecture (CrewAI-style) with FastAPI + Session Memory + Logs
+import streamlit as st
+import uuid
+import time
 
-from typing import Dict, Optional, List
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-import uvicorn
-import logging
+st.set_page_config(page_title="LIA – Kermit Assistant", layout="centered")
 
-# === Logging Setup ===
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("lia_agent")
+# --- Session State ---
+if "session_id" not in st.session_state:
+    st.session_state.session_id = str(uuid.uuid4())
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "intent" not in st.session_state:
+    st.session_state.intent = None
+if "step" not in st.session_state:
+    st.session_state.step = 0
+if "context" not in st.session_state:
+    st.session_state.context = {}
 
-# === Session Memory ===
-session_memory: Dict[str, List[str]] = {}
+# --- Utility Functions ---
+def log_event(msg):
+    st.write(f"🛠️ [log] {msg}")
 
-# === FastAPI App ===
-app = FastAPI()
+def add_message(speaker, text):
+    icon = "🟣" if speaker == "LIA" else "🟢"
+    st.session_state.messages.append(f"{icon} **{speaker}**: {text}")
 
-# Enable CORS for frontend integration (React/Streamlit)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+def reset_convo():
+    st.session_state.messages = []
+    st.session_state.intent = None
+    st.session_state.step = 0
+    st.session_state.context = {}
 
-# === Data Models ===
-class ChatRequest(BaseModel):
-    user_input: str
-    context: Optional[Dict] = {}
-    session_id: Optional[str] = "default"
+# --- Initial Greeting ---
+if st.session_state.step == 0 and not st.session_state.messages:
+    add_message("LIA", "Hi there! I’m LIA — your City of Kermit Assistant.")
+    add_message("LIA", "You can say things like:\n- I want to pay my bill\n- I want to apply for a permit\n- I want to report an issue")
+    log_event("Greeting and options sent.")
+    st.session_state.step = 0
 
-class ChatResponse(BaseModel):
-    response: str
-    memory: List[str]
+# --- Title + Message Display ---
+st.title("🤖 Meet LIA – Your City of Kermit Assistant")
+for msg in st.session_state.messages:
+    st.markdown(msg, unsafe_allow_html=True)
 
-# === Agent Definitions ===
-class BaseAgent:
-    def __init__(self, name: str):
-        self.name = name
+# --- Chat Input ---
+user_input = st.chat_input("Type your request...")
 
-    def handle(self, input_text: str, context: dict) -> str:
-        raise NotImplementedError
+if user_input:
+    add_message("You", user_input)
+    log_event(f"User said: {user_input}")
+    text = user_input.lower()
 
-class IntentAgent(BaseAgent):
-    def __init__(self):
-        super().__init__("Intent Agent")
-
-    def handle(self, input_text: str, context: dict) -> str:
-        logger.info(f"[IntentAgent] Input: {input_text}")
-        text = input_text.lower()
-        if "bill" in text and ("pay" in text or "check" in text):
-            return "pay_bill"
-        elif "ticket" in text:
-            return "pay_ticket"
+    # Step 0 – Intent Detection
+    if st.session_state.step == 0:
+        if "bill" in text:
+            st.session_state.intent = "pay_bill"
+            st.session_state.step = 1
+            add_message("LIA", "Sure! Please enter your address to locate your bill.")
+            log_event("Intent = pay_bill")
         elif "permit" in text:
-            return "apply_permit"
+            st.session_state.intent = "apply_permit"
+            st.session_state.step = 1
+            add_message("LIA", "What type of permit do you want to apply for?")
+            log_event("Intent = apply_permit")
         elif "report" in text:
-            return "report_issue"
+            st.session_state.intent = "report_issue"
+            st.session_state.step = 1
+            add_message("LIA", "Please describe the issue and its location.")
+            log_event("Intent = report_issue")
         else:
-            return "unknown"
+            add_message("LIA", "Sorry, I didn’t understand. Try saying 'pay my bill' or 'report a leak'.")
+            log_event("Intent = unknown")
 
-class BillAgent(BaseAgent):
-    def __init__(self):
-        super().__init__("Bill Agent")
+    # Step 1 – Collect Details Based on Intent
+    elif st.session_state.step == 1:
+        intent = st.session_state.intent
 
-    def handle(self, input_text: str, context: dict) -> str:
-        address = context.get("address", input_text)
-        logger.info(f"[BillAgent] Address: {address}")
-        if any(x in address.lower() for x in ["olive", "main", "pine", "123"]):
-            return f"Bill for {address}: $82.35. ✅ Do you want to proceed with payment?"
-        return f"❌ No bill found for {address}"
+        if intent == "pay_bill":
+            st.session_state.context["address"] = user_input
+            if any(x in text for x in ["olive", "main", "123", "pine"]):
+                amount = "$82.35"
+                st.session_state.context["amount"] = amount
+                add_message("LIA", f"✅ Found bill for {user_input}. Amount due: {amount}")
+                add_message("LIA", "Do you want to proceed with payment? (yes/no)")
+                st.session_state.step = 2
+                log_event(f"Address matched. Simulated bill: {amount}")
+            else:
+                add_message("LIA", f"❌ No bill found for {user_input}. Try again.")
+                log_event("Address not matched.")
 
-class TicketAgent(BaseAgent):
-    def __init__(self):
-        super().__init__("Ticket Agent")
+        elif intent == "apply_permit":
+            st.session_state.context["permit_type"] = user_input
+            add_message("LIA", f"Noted: {user_input} permit. What’s the address?")
+            st.session_state.step = 2
+            log_event("Permit type collected.")
 
-    def handle(self, input_text: str, context: dict) -> str:
-        ticket_id = context.get("ticket_id", input_text)
-        logger.info(f"[TicketAgent] Ticket ID: {ticket_id}")
-        if ticket_id == "123":
-            return "Ticket 123 found. Fine: $45.00. Would you like to pay now?"
-        return "❌ Ticket not found."
+        elif intent == "report_issue":
+            add_message("LIA", f"✅ Thanks for reporting: '{user_input}'. Our team will check it.")
+            st.session_state.step = 3
+            add_message("LIA", "Do you want to do anything else?")
+            log_event("Issue reported.")
 
-class PermitAgent(BaseAgent):
-    def __init__(self):
-        super().__init__("Permit Agent")
+    # Step 2 – Confirm Action or Collect More
+    elif st.session_state.step == 2:
+        intent = st.session_state.intent
+        text = user_input.lower()
 
-    def handle(self, input_text: str, context: dict) -> str:
-        permit_type = context.get("permit_type")
-        location = context.get("location")
-        logger.info(f"[PermitAgent] Type: {permit_type}, Location: {location}")
-        if not permit_type or not location:
-            return "Please provide both permit type and location."
-        return f"📝 Your {permit_type} permit for {location} has been submitted."
+        if intent == "pay_bill":
+            if "yes" in text:
+                add_message("LIA", "📩 Please check your SMS and email for the payment link.")
+                time.sleep(1)
+                add_message("LIA", "✅ Payment received! Your receipt is sent.")
+                add_message("LIA", "Would you like to pay another bill or return to the menu?")
+                st.session_state.step = 3
+                log_event("Payment simulated and confirmed.")
+            elif "no" in text:
+                add_message("LIA", "Okay, the payment has been cancelled. Anything else I can help with?")
+                st.session_state.step = 3
+                log_event("User declined payment.")
+            else:
+                add_message("LIA", "Please reply 'yes' or 'no' to continue.")
+                log_event("Waiting for payment confirmation.")
 
-# === Orchestrator Agent ===
-class LIAOrchestrator:
-    def __init__(self):
-        self.intent_agent = IntentAgent()
-        self.agents = {
-            "pay_bill": BillAgent(),
-            "pay_ticket": TicketAgent(),
-            "apply_permit": PermitAgent()
-        }
+        elif intent == "apply_permit":
+            st.session_state.context["permit_address"] = user_input
+            add_message("LIA", f"✅ Your permit for {st.session_state.context['permit_address']} has been submitted.")
+            add_message("LIA", "Would you like to apply for another permit or go back to the menu?")
+            st.session_state.step = 3
+            log_event("Permit submitted.")
 
-    def run(self, user_input: str, context: dict = {}) -> str:
-        logger.info(f"[LIAOrchestrator] Input: {user_input} | Context: {context}")
-        intent = self.intent_agent.handle(user_input, context)
-        logger.info(f"[LIAOrchestrator] Intent: {intent}")
-        agent = self.agents.get(intent)
-        if agent:
-            return agent.handle(user_input, context)
-        return (
-            "I didn’t quite catch that. You can ask me to pay a bill, pay a ticket, "
-            "apply for a permit, or report an issue."
-        )
+    # Step 3 – Final Options
+    elif st.session_state.step == 3:
+        if "yes" in text or "menu" in text or "another" in text:
+            reset_convo()
+            add_message("LIA", "Awesome! What would you like to do next?")
+            log_event("Conversation restarted.")
+        else:
+            add_message("LIA", "Thanks for using LIA. See you next time!")
+            log_event("Conversation ended.")
 
-lia_core = LIAOrchestrator()
-
-# === FastAPI Route ===
-@app.post("/chat", response_model=ChatResponse)
-def chat(request: ChatRequest):
-    session_id = request.session_id or "default"
-    logger.info(f"[API] Session ID: {session_id}")
-    response = lia_core.run(request.user_input, request.context or {})
-
-    # Update session memory
-    if session_id not in session_memory:
-        session_memory[session_id] = []
-    session_memory[session_id].append(f"🟢 You: {request.user_input}")
-    session_memory[session_id].append(f"🟣 LIA: {response}")
-
-    logger.info(f"[API] Memory for {session_id}: {session_memory[session_id]}")
-    return ChatResponse(response=response, memory=session_memory[session_id])
+# --- Debug / Restart ---
+with st.sidebar:
+    if st.button("🔁 Restart Conversation"):
+        reset_convo()
+        add_message("LIA", "Hi again! What would you like to do?")
+        log_event("Manual reset triggered.")
