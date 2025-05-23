@@ -1,4 +1,25 @@
-fastapi
-uvicorn
-pydantic
-python-multipart
+# LIA - Gov2Biz Conversational AI Requirements
+# Core FastAPI dependencies
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+jinja2==3.1.2
+pydantic==2.5.0
+
+# Environment and configuration
+python-dotenv==1.0.0
+
+# OpenAI integration (for future LLM enhancement)
+openai==1.3.0
+
+# Production server
+gunicorn==21.2.0
+
+# Development dependencies (optional)
+pytest==7.4.3
+httpx==0.25.2
+
+# For future database integration
+# sqlalchemy==2.0.23
+# psycopg2-binary==2.9.9
+# redis==5.0.1
