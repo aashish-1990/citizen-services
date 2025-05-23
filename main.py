@@ -55,6 +55,7 @@ class ChatResponse(BaseModel):
     intent: Optional[str] = None
     needs_escalation: bool = False
     options: Optional[List[str]] = None
+    auto_continue_delay: Optional[int] = None  # Milliseconds to wait before auto-continuing
 
 # User sessions storage (use Redis/database in production)
 user_sessions: Dict[str, Dict] = {}
@@ -212,7 +213,7 @@ Just tell me what you'd like to do in your own words - no need for special comma
 How can I help you today?"""
 
 def handle_pay_bill_flow(session: Dict, user_input: str) -> Dict:
-    """Handle bill payment conversation flow"""
+    """Handle bill payment conversation flow with realistic payment simulation"""
     if session["step"] == 1:
         session["step"] = 2
         return {
@@ -247,12 +248,12 @@ def handle_pay_bill_flow(session: Dict, user_input: str) -> Dict:
     elif session["step"] == 3:
         user_lower = user_input.lower()
         if "yes" in user_lower or "pay" in user_lower:
-            session["step"] = 0
-            session["intent"] = None
+            session["step"] = 4  # Move to payment processing step
             bill = session["context"]["bill"]
             return {
-                "response": f"✅ **Payment Successful!**\n\nYour ${bill['amount']:.2f} {bill['type']} bill has been paid successfully!\n\n📧 You'll receive a confirmation email shortly\n🧾 A receipt has been sent to your registered email\n📱 You can also view this payment in your account history\n\nIs there anything else I can help you with today?",
-                "needs_escalation": False
+                "response": f"Awesome! I'm processing your ${bill['amount']:.2f} {bill['type']} bill payment.\n\n📱 **Please check your SMS and email** for the secure payment link. You'll receive it within a few moments.\n\n⏳ Processing payment...",
+                "needs_escalation": False,
+                "auto_continue_delay": 2000  # Auto-continue after 2 seconds
             }
         elif "other" in user_lower or "show" in user_lower:
             session["step"] = 2
@@ -267,6 +268,17 @@ def handle_pay_bill_flow(session: Dict, user_input: str) -> Dict:
                 "response": "No problem at all! Your bill information is saved and you can come back to pay it anytime before the due date.\n\n⏰ **Reminder**: Your bill is due on " + session["context"]["bill"]["due_date"] + "\n\nIs there anything else I can help you with?",
                 "needs_escalation": False
             }
+    
+    elif session["step"] == 4:
+        # Payment confirmation step (auto-triggered after delay)
+        session["step"] = 0
+        session["intent"] = None
+        bill = session["context"]["bill"]
+        return {
+            "response": f"✅ **Payment Successful!**\n\nYour ${bill['amount']:.2f} {bill['type']} bill has been paid successfully!\n\n🧾 **Receipt #**: PAY{datetime.now().strftime('%Y%m%d%H%M%S')}\n📧 **Confirmation email**: Sent to your registered email\n📱 **SMS confirmation**: Sent to your phone\n\nWhat would you like to do next?",
+            "needs_escalation": False,
+            "options": ["Download receipt", "Pay another bill", "Check other services", "I'm all set"]
+        }
 
 def handle_apply_permit_flow(session: Dict, user_input: str) -> Dict:
     """Handle permit application flow"""
@@ -479,17 +491,21 @@ def chat(request: ChatRequest):
         
         user_input = request.message.strip()
         
-        # Add to conversation history
-        session["conversation_history"].append({
-            "user": user_input, 
-            "timestamp": datetime.now().isoformat()
-        })
+        # Handle auto-continue messages (don't add to conversation history)
+        is_auto_continue = user_input == "continue_payment"
+        
+        # Add to conversation history (except auto-continue messages)
+        if not is_auto_continue:
+            session["conversation_history"].append({
+                "user": user_input, 
+                "timestamp": datetime.now().isoformat()
+            })
         
         response_data = {"needs_escalation": False, "options": None}
         
         # Handle conversation flow
-        if session["step"] == 0:
-            # Detect intent for new conversation
+        if session["step"] == 0 and not is_auto_continue:
+            # Detect intent for new conversation (but not for auto-continue)
             intent_result = detect_intent_with_llm(user_input, session["conversation_history"])
             intent = intent_result["intent"]
             
@@ -540,7 +556,7 @@ def chat(request: ChatRequest):
 Just tell me what you'd like to do, and I'll guide you through it step by step!"""
         
         else:
-            # Continue existing conversation flow
+            # Continue existing conversation flow (including auto-continue)
             if session["intent"] == "pay_bill":
                 result = handle_pay_bill_flow(session, user_input)
                 response_text = result["response"]
@@ -562,8 +578,9 @@ Just tell me what you'd like to do, and I'll guide you through it step by step!"
                 response_text = result["response"]
                 response_data.update(result)
         
-        # Log interaction
-        log_interaction(session_id, user_input, response_text, session.get("intent"))
+        # Log interaction (skip auto-continue messages)
+        if not is_auto_continue:
+            log_interaction(session_id, user_input, response_text, session.get("intent"))
         
         # Add bot response to history
         session["conversation_history"].append({
@@ -576,7 +593,8 @@ Just tell me what you'd like to do, and I'll guide you through it step by step!"
             session_id=session_id,
             intent=session.get("intent"),
             needs_escalation=response_data["needs_escalation"],
-            options=response_data.get("options")
+            options=response_data.get("options"),
+            auto_continue_delay=response_data.get("auto_continue_delay")
         )
         
     except Exception as e:
@@ -584,7 +602,8 @@ Just tell me what you'd like to do, and I'll guide you through it step by step!"
         return ChatResponse(
             reply="I'm experiencing some technical difficulties right now. Let me connect you with a human representative who can help you immediately.",
             session_id=session_id or str(uuid.uuid4()),
-            needs_escalation=True
+            needs_escalation=True,
+            auto_continue_delay=None
         )
 
 @app.get("/analytics/summary")
