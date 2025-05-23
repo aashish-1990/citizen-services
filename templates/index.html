@@ -112,6 +112,43 @@
                 opacity: 0;
                 transform: translateY(10px);
             }
+            
+            async handleAutoContinue() {
+                // Auto-continue for payment processing simulation
+                this.setLoading(true);
+                
+                try {
+                    const response = await fetch('/chat', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            message: "continue_payment", // Special message to trigger next step
+                            session_id: this.sessionId
+                        })
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    
+                    const data = await response.json();
+                    
+                    setTimeout(() => {
+                        this.setLoading(false);
+                        this.addMessage(data.reply, 'bot', data.options, data.needs_escalation);
+                    }, 800);
+                    
+                } catch (error) {
+                    console.error('Auto-continue error:', error);
+                    this.setLoading(false);
+                    this.addMessage(
+                        "Payment processing completed! Your bill has been paid successfully.",
+                        'bot'
+                    );
+                }
+            }
             to {
                 opacity: 1;
                 transform: translateY(0);
@@ -440,9 +477,10 @@
             </div>
             <div class="quick-actions">
                 <span class="quick-action" onclick="sendQuickMessage('I want to pay my bill')">💳 Pay Bill</span>
-                <span class="quick-action" onclick="sendQuickMessage('I need a permit')">📋 Get Permit</span>
+                <span class="quick-action" onclick="sendQuickMessage('I need a garage sale permit')">🎪 Garage Sale Permit</span>
                 <span class="quick-action" onclick="sendQuickMessage('Pay a ticket')">🎫 Pay Ticket</span>
                 <span class="quick-action" onclick="sendQuickMessage('Report an issue')">🛠️ Report Issue</span>
+                <span class="quick-action" onclick="sendQuickMessage('Check permit status')">📊 Check Status</span>
             </div>
         </div>
         
@@ -558,6 +596,13 @@
                     setTimeout(() => {
                         this.setLoading(false);
                         this.addMessage(data.reply, 'bot', data.options, data.needs_escalation);
+                        
+                        // Handle auto-continue for payment simulation
+                        if (data.auto_continue_delay) {
+                            setTimeout(() => {
+                                this.handleAutoContinue();
+                            }, data.auto_continue_delay);
+                        }
                     }, delay);
                     
                 } catch (error) {
