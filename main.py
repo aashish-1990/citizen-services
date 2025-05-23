@@ -150,8 +150,10 @@ MOCK_APPLICATIONS = {
 # City of Kermit boundaries (mock data for address validation)
 CITY_BOUNDARIES = [
     "main st", "main street", "pine st", "pine street", "oak ave", "oak avenue", 
-    "elm street", "maple avenue", "cedar lane", "birch road", "willow drive",
-    "commerce st", "downtown", "city center"
+    "elm street", "elm st", "maple avenue", "maple ave", "cedar lane", "cedar ln", 
+    "birch road", "birch rd", "willow drive", "willow dr", "commerce st", "commerce street",
+    "downtown", "city center", "first street", "first st", "second street", "second st",
+    "third street", "third st", "fourth street", "fourth st", "fifth street", "fifth st"
 ]
 
 PERMIT_TYPES = [
@@ -747,16 +749,19 @@ def chat(request: ChatRequest):
                 response_data.update(result)
             elif intent == "apply_permit":
                 session["intent"] = "apply_permit"
-                session["step"] = 1
                 
                 # Check if it's specifically a garage sale permit request
                 entities = intent_result.get("entities", {})
-                if entities.get("permit_type") == "garage_sale" or any(phrase in user_input.lower() for phrase in ["garage sale permit", "garage sale"]):
-                    # Skip the permit type selection and go directly to garage sale flow
+                is_garage_sale = entities.get("permit_type") == "garage_sale" or any(phrase in user_input.lower() for phrase in ["garage sale permit", "garage sale"])
+                
+                if is_garage_sale:
+                    # For garage sale permits, set context and jump to address collection
                     session["context"]["permit_type"] = "garage sale permit"
-                    session["step"] = 3  # Jump to address collection for garage sale
-                    result = handle_apply_permit_flow(session, user_input)
+                    session["step"] = 3
+                    # Call handle_apply_permit_flow with a dummy input to trigger address request
+                    result = handle_apply_permit_flow(session, "")
                 else:
+                    session["step"] = 1
                     result = handle_apply_permit_flow(session, user_input)
                     
                 response_text = result["response"]
