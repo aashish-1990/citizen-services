@@ -146,6 +146,19 @@ def detect_intent_with_llm(message: str, conversation_history: List = None) -> D
     """Detect intent using LLM (fallback to keyword matching for demo)"""
     message_lower = message.lower().strip()
     
+    # Special cases - handle specific button clicks first
+    if message_lower in ["check other services", "other services", "main menu", "back to menu"]:
+        return {"intent": "greeting", "confidence": 0.9, "entities": {}, "needs_clarification": False}
+    
+    if message_lower in ["download receipt", "get receipt"]:
+        return {"intent": "download_receipt", "confidence": 0.9, "entities": {}, "needs_clarification": False}
+    
+    if message_lower in ["pay another bill", "another bill"]:
+        return {"intent": "pay_bill", "confidence": 0.9, "entities": {}, "needs_clarification": False}
+    
+    if message_lower in ["i'm all set", "all set", "done", "finished", "no thanks"]:
+        return {"intent": "farewell", "confidence": 0.9, "entities": {}, "needs_clarification": False}
+    
     # Greeting detection
     if any(word in message_lower for word in ["hello", "hi", "hey", "help", "start"]):
         return {"intent": "greeting", "confidence": 0.9, "entities": {}, "needs_clarification": False}
@@ -166,8 +179,8 @@ def detect_intent_with_llm(message: str, conversation_history: List = None) -> D
     if any(word in message_lower for word in ["report", "issue", "problem", "pothole", "streetlight", "traffic", "noise"]):
         return {"intent": "report_issue", "confidence": 0.9, "entities": {}, "needs_clarification": False}
     
-    # Status check detection
-    if any(word in message_lower for word in ["status", "check", "track", "application"]):
+    # Status check detection (only for specific status-related phrases, not general "check")
+    if any(phrase in message_lower for phrase in ["application status", "check status", "track application", "status of", "my application"]):
         return {"intent": "check_status", "confidence": 0.9, "entities": {}, "needs_clarification": False}
     
     # Escalation keywords
@@ -544,6 +557,10 @@ def chat(request: ChatRequest):
             elif intent == "escalate":
                 response_text = "Of course! Let me connect you with a human representative who can provide personalized assistance. Please hold on for just a moment."
                 response_data["needs_escalation"] = True
+            elif intent == "download_receipt":
+                response_text = "🧾 **Receipt Download**\n\nYour receipt has been generated and will be downloaded shortly. You can also find all your payment receipts in your account history.\n\nIs there anything else I can help you with today?"
+            elif intent == "farewell":
+                response_text = "Perfect! Thank you for using our city services. Have a wonderful day! 😊\n\nRemember, I'm here 24/7 whenever you need help with city services. Just come back and start a new conversation anytime!"
             else:
                 response_text = """I'm here to help with city services! I can assist you with:
 
