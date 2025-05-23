@@ -94,11 +94,65 @@ MOCK_TICKETS = {
     "PK2025001": {"amount": 35.00, "type": "parking meter", "location": "Downtown", "date": "2025-05-22"}
 }
 
-MOCK_APPLICATIONS = {
-    "APP001": {"type": "garage sale permit", "status": "approved", "address": "123 Main St", "submitted": "2025-05-10"},
-    "APP002": {"type": "construction permit", "status": "pending review", "address": "456 Oak Ave", "submitted": "2025-05-18"},
-    "APP003": {"type": "business license", "status": "under review", "address": "789 Commerce St", "submitted": "2025-05-20"}
+# Mock data for demonstration - In production, replace with real database calls
+MOCK_BILLS = {
+    "123 main st": {
+        "amount": 82.35, 
+        "type": "water", 
+        "due_date": "2025-06-15",
+        "account": "WAT-001234"
+    },
+    "456 olive ave": {
+        "amount": 156.20, 
+        "type": "electricity", 
+        "due_date": "2025-06-10",
+        "account": "ELE-005678"
+    },
+    "789 pine rd": {
+        "amount": 45.80, 
+        "type": "gas", 
+        "due_date": "2025-06-20",
+        "account": "GAS-009876"
+    },
+    "101 oak street": {
+        "amount": 234.50, 
+        "type": "water", 
+        "due_date": "2025-06-18",
+        "account": "WAT-001122"
+    }
 }
+
+MOCK_TICKETS = {
+    "TK001": {"amount": 45.00, "type": "parking", "location": "Main St", "date": "2025-05-15"},
+    "TK002": {"amount": 125.00, "type": "speeding", "location": "Highway 101", "date": "2025-05-20"},
+    "PK2025001": {"amount": 35.00, "type": "parking meter", "location": "Downtown", "date": "2025-05-22"}
+}
+
+# Enhanced garage sales permit tracking system
+GARAGE_SALE_PERMITS = {
+    # Track permits by address and year for annual limit enforcement
+    "123 pine street": [
+        {"permit_id": "GSP-2025-045", "date": "2025-04-15", "duration": 1, "status": "approved", "year": 2025},
+    ],
+    "456 oak avenue": [
+        {"permit_id": "GSP-2025-023", "date": "2025-03-10", "duration": 2, "status": "approved", "year": 2025},
+        {"permit_id": "GSP-2025-031", "date": "2025-04-20", "duration": 1, "status": "approved", "year": 2025},
+    ]
+}
+
+MOCK_APPLICATIONS = {
+    "APP001": {"type": "construction permit", "status": "pending review", "address": "123 Main St", "submitted": "2025-05-10"},
+    "APP002": {"type": "business license", "status": "under review", "address": "456 Oak Ave", "submitted": "2025-05-18"},
+    "GSP-2025-045": {"type": "garage sale permit", "status": "approved", "address": "123 Pine Street", "submitted": "2025-04-10", "date": "2025-04-15", "duration": "1 day"},
+    "GSP-2025-023": {"type": "garage sale permit", "status": "approved", "address": "456 Oak Avenue", "submitted": "2025-03-05", "date": "2025-03-10", "duration": "2 days"},
+}
+
+# City of Kermit boundaries (mock data for address validation)
+CITY_BOUNDARIES = [
+    "main st", "main street", "pine st", "pine street", "oak ave", "oak avenue", 
+    "elm street", "maple avenue", "cedar lane", "birch road", "willow drive",
+    "commerce st", "downtown", "city center"
+]
 
 PERMIT_TYPES = [
     "Garage sale permit",
@@ -117,6 +171,148 @@ ISSUE_TYPES = [
     "Noise complaint",
     "Other"
 ]
+
+# Garage Sales Permit Helper Functions
+def validate_garage_sale_date(date_str: str) -> Dict:
+    """Validate garage sale date according to City of Kermit rules"""
+    try:
+        from datetime import datetime, timedelta
+        import re
+        
+        # Parse various date formats
+        date_str = date_str.lower().strip()
+        current_date = datetime.now()
+        
+        # Handle common date formats
+        if re.match(r'^(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2}', date_str):
+            # "June 8", "June 8th"
+            date_str = re.sub(r'(st|nd|rd|th)', '', date_str)
+            try:
+                parsed_date = datetime.strptime(f"{date_str} {current_date.year}", "%B %d %Y")
+            except:
+                parsed_date = datetime.strptime(f"{date_str} {current_date.year}", "%b %d %Y")
+        elif re.match(r'\d{1,2}/\d{1,2}', date_str):
+            # "6/8" or "06/08"
+            try:
+                parsed_date = datetime.strptime(f"{date_str}/{current_date.year}", "%m/%d/%Y")
+            except:
+                return {"valid": False, "error": "Invalid date format. Try 'June 8' or '6/8'"}
+        elif re.match(r'\d{4}-\d{2}-\d{2}', date_str):
+            # "2025-06-08"
+            parsed_date = datetime.strptime(date_str, "%Y-%m-%d")
+        else:
+            # Try to parse other formats
+            try:
+                parsed_date = datetime.strptime(date_str, "%B %d")
+                parsed_date = parsed_date.replace(year=current_date.year)
+            except:
+                return {"valid": False, "error": "I didn't understand that date format. Please try 'June 8' or '6/8'"}
+        
+        # Check if date is in the past
+        if parsed_date.date() < current_date.date():
+            return {"valid": False, "error": "Sorry, you can't schedule a garage sale for a past date. Please choose a future date."}
+        
+        # Check if date is more than 30 days in advance
+        if parsed_date.date() > (current_date + timedelta(days=30)).date():
+            return {"valid": False, "error": "You can only apply for garage sale permits up to 30 days in advance. Please choose a date within the next 30 days."}
+        
+        return {
+            "valid": True, 
+            "parsed_date": parsed_date,
+            "formatted_date": parsed_date.strftime("%B %d, %Y")
+        }
+        
+    except Exception as e:
+        return {"valid": False, "error": "I had trouble understanding that date. Please try a format like 'June 8' or '6/8'"}
+
+def check_annual_permit_limit(address: str) -> Dict:
+    """Check if address has exceeded 2 garage sale permits per year limit"""
+    address_clean = address.lower().strip()
+    current_year = datetime.now().year
+    
+    permits_this_year = 0
+    existing_permits = []
+    
+    for addr, permits in GARAGE_SALE_PERMITS.items():
+        if addr in address_clean or address_clean in addr:
+            year_permits = [p for p in permits if p.get("year", 2025) == current_year and p.get("status") == "approved"]
+            permits_this_year += len(year_permits)
+            existing_permits.extend(year_permits)
+    
+    return {
+        "within_limit": permits_this_year < 2,
+        "current_count": permits_this_year,
+        "existing_permits": existing_permits,
+        "remaining": max(0, 2 - permits_this_year)
+    }
+
+def validate_city_address(address: str) -> Dict:
+    """Check if address is within City of Kermit boundaries"""
+    address_clean = address.lower().strip()
+    
+    # Check against known city streets
+    is_valid = any(boundary in address_clean for boundary in CITY_BOUNDARIES)
+    
+    return {
+        "valid": is_valid,
+        "message": "Address verified within City of Kermit limits" if is_valid else "This address appears to be outside City of Kermit boundaries. Please verify the address or contact us at (555) 123-CITY for assistance."
+    }
+
+def generate_garage_sale_permit_id() -> str:
+    """Generate unique garage sale permit ID in GSP-YYYY-XXX format"""
+    current_year = datetime.now().year
+    
+    # Count existing permits for this year to get next number
+    existing_count = 0
+    for permits in GARAGE_SALE_PERMITS.values():
+        existing_count += len([p for p in permits if p.get("year", 2025) == current_year])
+    
+    # Also count from MOCK_APPLICATIONS
+    for app_id, app in MOCK_APPLICATIONS.items():
+        if app_id.startswith("GSP-") and app.get("type") == "garage sale permit":
+            existing_count += 1
+    
+    next_number = existing_count + 1
+    return f"GSP-{current_year}-{next_number:03d}"
+
+def validate_permit_duration(duration_str: str) -> Dict:
+    """Validate garage sale duration"""
+    try:
+        duration_clean = duration_str.lower().strip()
+        
+        # Extract number from various formats
+        import re
+        numbers = re.findall(r'\d+', duration_clean)
+        
+        if not numbers:
+            return {"valid": False, "error": "Please specify the number of days (e.g., '1 day', '2', or 'two days')"}
+        
+        duration = int(numbers[0])
+        
+        if duration < 1:
+            return {"valid": False, "error": "Garage sale must be at least 1 day long."}
+        elif duration > 3:
+            return {"valid": False, "error": "Garage sales are limited to maximum 3 consecutive days. For longer events, you may need a special event permit."}
+        
+        day_word = "day" if duration == 1 else "days"
+        return {
+            "valid": True,
+            "duration": duration,
+            "formatted": f"{duration} {day_word}"
+        }
+        
+    except:
+        return {"valid": False, "error": "Please specify the number of days as a number (e.g., '1', '2', or 'two')"}
+
+def calculate_garage_sale_fee(duration: int) -> float:
+    """Calculate garage sale permit fee based on duration"""
+    base_fee = 15.00  # Base fee for 1 day
+    additional_day_fee = 5.00  # Additional fee per extra day
+    
+    if duration <= 1:
+        return base_fee
+    else:
+        return base_fee + ((duration - 1) * additional_day_fee)
 
 def get_session(session_id: str) -> Dict:
     """Get or create user session"""
@@ -159,6 +355,14 @@ def detect_intent_with_llm(message: str, conversation_history: List = None) -> D
     if message_lower in ["i'm all set", "all set", "done", "finished", "no thanks"]:
         return {"intent": "farewell", "confidence": 0.9, "entities": {}, "needs_clarification": False}
     
+    # Garage sale permit specific detection
+    if any(phrase in message_lower for phrase in ["garage sale permit", "garage sale", "yard sale permit", "yard sale"]):
+        return {"intent": "apply_permit", "confidence": 0.95, "entities": {"permit_type": "garage_sale"}, "needs_clarification": False}
+    
+    # Permit status checking with garage sale specificity
+    if any(phrase in message_lower for phrase in ["check permit gsp", "permit gsp", "garage sale status", "check my garage sale"]):
+        return {"intent": "check_status", "confidence": 0.95, "entities": {"permit_type": "garage_sale"}, "needs_clarification": False}
+    
     # Greeting detection
     if any(word in message_lower for word in ["hello", "hi", "hey", "help", "start"]):
         return {"intent": "greeting", "confidence": 0.9, "entities": {}, "needs_clarification": False}
@@ -167,9 +371,9 @@ def detect_intent_with_llm(message: str, conversation_history: List = None) -> D
     if any(word in message_lower for word in ["bill", "pay", "water", "electricity", "gas", "electric", "utility"]):
         return {"intent": "pay_bill", "confidence": 0.9, "entities": {}, "needs_clarification": False}
     
-    # Permit application detection
-    if any(word in message_lower for word in ["permit", "license", "apply", "application", "garage sale", "construction"]):
-        return {"intent": "apply_permit", "confidence": 0.9, "entities": {}, "needs_clarification": False}
+    # General permit application detection
+    if any(word in message_lower for word in ["permit", "license", "apply", "application", "construction"]):
+        return {"intent": "apply_permit", "confidence": 0.8, "entities": {}, "needs_clarification": False}
     
     # Ticket/fine payment detection
     if any(word in message_lower for word in ["ticket", "fine", "violation", "parking", "speeding"]):
@@ -180,7 +384,7 @@ def detect_intent_with_llm(message: str, conversation_history: List = None) -> D
         return {"intent": "report_issue", "confidence": 0.9, "entities": {}, "needs_clarification": False}
     
     # Status check detection (only for specific status-related phrases, not general "check")
-    if any(phrase in message_lower for phrase in ["application status", "check status", "track application", "status of", "my application"]):
+    if any(phrase in message_lower for phrase in ["application status", "check status", "track application", "status of", "my application", "permit status"]):
         return {"intent": "check_status", "confidence": 0.9, "entities": {}, "needs_clarification": False}
     
     # Escalation keywords
@@ -212,16 +416,27 @@ def search_by_address(address: str, search_type: str) -> Dict:
 
 def handle_greeting() -> str:
     """Handle greeting intent with friendly response"""
-    return """Hello! 👋 I'm LIA, your friendly city services assistant. I'm here to help make your interaction with city services as smooth as possible.
+    return """Hello! 👋 I'm LIA, your **City of Kermit** AI assistant. I'm here to help make your interaction with city services as smooth as possible.
 
 I can help you with:
 • 💳 **Pay bills** (water, electricity, gas)
-• 📋 **Apply for permits** (garage sale, construction, business license)
 • 🎫 **Pay tickets or fines** (parking, traffic violations)
 • 🛠️ **Report issues** (potholes, streetlights, etc.)
 • 📊 **Check application status**
+• 🎪 **Apply for garage sale permits** *(with smart validation & City of Kermit rules)*
 
-Just tell me what you'd like to do in your own words - no need for special commands! For example, you could say "I want to pay my water bill" or "There's a pothole on Main Street."
+**✨ New Enhanced Features:**
+• 🏠 **Address validation** within city limits
+• 📅 **Date verification** (no past dates, 30-day advance limit)
+• 📋 **Annual permit tracking** (2 garage sales per address/year)
+• 💰 **Automatic fee calculation** based on duration
+• 🆔 **Real permit IDs** (GSP-2025-XXX format)
+
+Just tell me what you'd like to do in your own words! For example:
+• *"I want to pay my water bill"*
+• *"I need a garage sale permit for June 8th"*
+• *"Check my permit GSP-2025-045"*
+• *"There's a pothole on Pine Street"*
 
 How can I help you today?"""
 
