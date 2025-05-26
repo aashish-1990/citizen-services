@@ -733,6 +733,9 @@ def chat(request: ChatRequest):
         
         response_data = {"needs_escalation": False, "options": None}
         
+        # Debug session state
+        logger.info(f"Processing message. Session step: {session.get('step')}, Intent: {session.get('intent')}, Auto-continue: {is_auto_continue}")
+        
         # Handle conversation flow
         if session["step"] == 0 and not is_auto_continue:
             # Detect intent for new conversation (but not for auto-continue)
