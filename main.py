@@ -750,22 +750,32 @@ def chat(request: ChatRequest):
             elif intent == "apply_permit":
                 session["intent"] = "apply_permit"
                 
-                # Check if it's specifically a garage sale permit request
-                entities = intent_result.get("entities", {})
-                is_garage_sale = entities.get("permit_type") == "garage_sale" or any(phrase in user_input.lower() for phrase in ["garage sale permit", "garage sale"])
+                # Check if it's specifically a garage sale permit request  
+                is_garage_sale = (
+                    "garage sale permit" in user_input.lower() or 
+                    "garage sale" in user_input.lower() or
+                    "yard sale permit" in user_input.lower() or
+                    "yard sale" in user_input.lower()
+                )
+                
+                # Log for debugging
+                logger.info(f"Permit request detected. User input: '{user_input}', Is garage sale: {is_garage_sale}")
                 
                 if is_garage_sale:
-                    # For garage sale permits, set context and jump to address collection
+                    # For garage sale permits, start the enhanced flow directly
                     session["context"]["permit_type"] = "garage sale permit"
                     session["step"] = 3
-                    # Call handle_apply_permit_flow with a dummy input to trigger address request
-                    result = handle_apply_permit_flow(session, "")
+                    response_text = "Perfect! I'll help you apply for a **garage sale permit**. Let me gather the required information.\n\n🏠 **What is the address where you'll hold the garage sale?**\n\nPlease provide the full street address (e.g., '123 Pine Street')."
+                    response_data["needs_escalation"] = False
+                    logger.info(f"Garage sale permit flow initiated. Step: {session['step']}")
                 else:
+                    # For other permits, use generic flow
                     session["step"] = 1
                     result = handle_apply_permit_flow(session, user_input)
-                    
-                response_text = result["response"]
-                response_data.update(result)
+                    response_text = result["response"]
+                    response_data.update(result)
+                    logger.info(f"Generic permit flow initiated. Step: {session['step']}")
+
             elif intent == "pay_ticket":
                 session["intent"] = "pay_ticket"
                 session["step"] = 1
